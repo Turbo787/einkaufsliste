@@ -1444,3 +1444,11 @@ body.modal-open {
         width: 100%;
     }
 }
+#qr-modal[hidden] {
+    display: none !important;
+}
+
+#qr-modal:not([hidden]) {
+    display: grid;
+    place-items: center;
+}
