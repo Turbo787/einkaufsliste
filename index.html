@@ -33,17 +33,24 @@
                 <span id="list-id-display" class="list-id-display"></span>
             </div>
 
-            <div class="share-row">
-                <label class="sr-only" for="share-link">Freigabelink</label>
-                <input id="share-link" type="text" readonly>
-                <button id="copy-link" class="secondary-button" type="button">
-                    Link kopieren
-                </button>
-            </div>
+            <div class="share-actions">
+    <input
+        id="share-link"
+        class="share-link-hidden"
+        type="text"
+        readonly
+        aria-hidden="true"
+    >
 
-            <p class="share-hint">
-                Jeder mit diesem Link kann diese Liste sehen und bearbeiten.
-            </p>
+    <button id="copy-link" class="share-button" type="button">
+        <span aria-hidden="true">🔗</span>
+        Liste teilen
+    </button>
+</div>
+
+<p class="share-hint">
+    Teile die Einkaufsliste mit anderen Personen.
+</p>
         </section>
 
         <section class="add-item-section">
@@ -89,6 +96,7 @@
     class="category-manager-button"
     type="button"
 >
+    <span aria-hidden="true">☷</span>
     Kategorien verwalten
 </button>
 
