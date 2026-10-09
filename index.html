@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meine Einkaufsliste</title>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="app-container">
+
+    <section class="app-card">
+
+        <header class="app-header">
+            <div>
+                <p class="eyebrow">Gemeinsam besser einkaufen</p>
+                <h1>Meine Einkaufsliste</h1>
+                <p class="subtitle">
+                    Plane deine Einkäufe einfach und übersichtlich.
+                </p>
+            </div>
+
+            <div class="shopping-icon">🛒</div>
+        </header>
+
+        <section class="add-item-section">
+            <form id="item-form">
+
+                <div class="input-group main-input">
+                    <label for="item-name">Was möchtest du einkaufen?</label>
+                    <input
+                            id="item-name"
+                            type="text"
+                            placeholder="Zum Beispiel: Milch"
+                            required
+                    >
+                </div>
+
+                <div class="input-group">
+                    <label for="item-category">Kategorie</label>
+                    <select id="item-category">
+                        <option value="Lebensmittel">Lebensmittel</option>
+                        <option value="Getränke">Getränke</option>
+                        <option value="Haushalt">Haushalt</option>
+                        <option value="Obst & Gemüse">Obst & Gemüse</option>
+                        <option value="Sonstiges">Sonstiges</option>
+                    </select>
+                </div>
+
+                <button class="primary-button" type="submit">
+                    <span>＋</span>
+                    Hinzufügen
+                </button>
+            </form>
+        </section>
+
+        <section class="toolbar">
+
+            <div class="filter-buttons">
+                <button class="filter-button active" data-filter="all">
+                    Alle
+                </button>
+
+                <button class="filter-button" data-filter="open">
+                    Offen
+                </button>
+
+                <button class="filter-button" data-filter="done">
+                    Erledigt
+                </button>
+            </div>
+
+            <select id="category-filter" class="category-filter">
+                <option value="all">Alle Kategorien</option>
+                <option value="Lebensmittel">Lebensmittel</option>
+                <option value="Getränke">Getränke</option>
+                <option value="Haushalt">Haushalt</option>
+                <option value="Obst & Gemüse">Obst & Gemüse</option>
+                <option value="Sonstiges">Sonstiges</option>
+            </select>
+
+        </section>
+
+        <section class="list-header">
+            <div>
+                <h2>Deine Artikel</h2>
+                <p id="item-count">0 Artikel</p>
+            </div>
+
+            <button id="clear-completed" class="text-button">
+                Erledigte löschen
+            </button>
+        </section>
+
+        <section id="empty-state" class="empty-state">
+            <div class="empty-icon">📝</div>
+            <h3>Noch keine Artikel</h3>
+            <p>
+                Füge oben deinen ersten Artikel hinzu.
+            </p>
+        </section>
+
+        <ul id="shopping-list" class="shopping-list"></ul>
+
+        <footer class="app-footer">
+            <span id="remaining-count">0 offene Artikel</span>
+            <span>Wird automatisch gespeichert</span>
+        </footer>
+
+    </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
