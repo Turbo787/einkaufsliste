@@ -22,6 +22,24 @@ const editItemCategoryInput =
 const closeEditModalButton =
     document.getElementById("close-edit-modal");
 const cancelEditButton = document.getElementById("cancel-edit");
+const manageCategoriesButton =
+    document.getElementById("manage-categories");
+const categoryModal = document.getElementById("category-modal");
+const closeCategoryModalButton =
+    document.getElementById("close-category-modal");
+const categorySearchInput =
+    document.getElementById("category-search");
+const categorySortInput =
+    document.getElementById("category-sort");
+const managerCategoryInput =
+    document.getElementById("manager-category-input");
+const managerAddCategoryButton =
+    document.getElementById("manager-add-category");
+const categoryManagerList =
+    document.getElementById("category-manager-list");
+const undoToast = document.getElementById("undo-toast");
+const undoMessage = document.getElementById("undo-message");
+const undoDeleteButton = document.getElementById("undo-delete");
 const filterButtons = document.querySelectorAll(".filter-button");
 const connectionStatus = document.getElementById("connection-status");
 const shareLinkInput = document.getElementById("share-link");
@@ -34,6 +52,9 @@ let items = [];
 let currentStatusFilter = "all";
 let currentCategoryFilter = "all";
 let editingItemId = null;
+let categorySortMode = "name";
+let deletedItemForUndo = null;
+let undoTimerId = null;
 
 const LIST_ID_PARAM = "list";
 const UUID_V4_REGEX =
@@ -154,7 +175,28 @@ function getAvailableCategories() {
         }
     });
 
-    return Array.from(categories);
+    const categoryList = Array.from(categories);
+
+    if (categorySortMode === "usage") {
+        return categoryList.sort((firstCategory, secondCategory) => {
+            const firstUsage = getCategoryUsageCount(firstCategory);
+            const secondUsage = getCategoryUsageCount(secondCategory);
+
+            if (secondUsage !== firstUsage) {
+                return secondUsage - firstUsage;
+            }
+
+            return firstCategory.localeCompare(secondCategory, "de");
+        });
+    }
+
+    return categoryList.sort((firstCategory, secondCategory) =>
+        firstCategory.localeCompare(secondCategory, "de")
+    );
+}
+
+function getCategoryUsageCount(category) {
+    return items.filter((item) => item.category === category).length;
 }
 
 function refreshCategoryOptions() {
@@ -277,6 +319,43 @@ function setupEventHandlers() {
     });
 
     editForm.addEventListener("submit", saveEditedItem);
+        manageCategoriesButton.addEventListener(
+        "click",
+        openCategoryModal
+    );
+
+    closeCategoryModalButton.addEventListener(
+        "click",
+        closeCategoryModal
+    );
+
+    categoryModal.addEventListener("click", (event) => {
+        if (event.target === categoryModal) {
+            closeCategoryModal();
+        }
+    });
+
+    categorySearchInput.addEventListener("input", renderCategoryManager);
+
+    categorySortInput.addEventListener("change", () => {
+        categorySortMode = categorySortInput.value;
+        refreshCategoryOptions();
+        renderCategoryManager();
+    });
+
+    managerAddCategoryButton.addEventListener(
+        "click",
+        createCategoryFromManager
+    );
+
+    managerCategoryInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            createCategoryFromManager();
+        }
+    });
+
+    undoDeleteButton.addEventListener("click", undoLastDelete);
 
     customCategoryInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -375,6 +454,9 @@ function setupEventHandlers() {
     openEditModal(item);
     return;
 }
+                if (action === "delete") {
+            await deleteItemImmediately(item);
+        }
     });
 
     filterButtons.forEach((button) => {
@@ -441,6 +523,291 @@ function setupEventHandlers() {
         }
     });
 }
+async function deleteItemImmediately(item) {
+    const { error } = await supabaseClient
+        .from("shopping_items")
+        .delete()
+        .eq("id", item.id)
+        .eq("list_id", currentListId);
+
+    if (error) {
+        setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
+        return;
+    }
+
+    deletedItemForUndo = {
+        id: item.id,
+        list_id: item.list_id,
+        name: item.name,
+        category: item.category,
+        completed: item.completed
+    };
+
+    removeItem(item.id);
+    renderItems();
+    showUndoToast(item.name);
+}
+
+function showUndoToast(itemName) {
+    if (undoTimerId !== null) {
+        window.clearTimeout(undoTimerId);
+    }
+
+    undoMessage.textContent = `"${itemName}" wurde gelöscht.`;
+    undoToast.hidden = false;
+
+    undoTimerId = window.setTimeout(() => {
+        deletedItemForUndo = null;
+        undoToast.hidden = true;
+        undoTimerId = null;
+    }, 8000);
+}
+
+async function undoLastDelete() {
+    if (!deletedItemForUndo || !supabaseClient) {
+        return;
+    }
+
+    const itemToRestore = deletedItemForUndo;
+
+    const { data, error } = await supabaseClient
+        .from("shopping_items")
+        .insert({
+            id: itemToRestore.id,
+            list_id: itemToRestore.list_id,
+            name: itemToRestore.name,
+            category: itemToRestore.category,
+            completed: itemToRestore.completed
+        })
+        .select()
+        .single();
+
+    if (error) {
+        setStatus(`Wiederherstellen fehlgeschlagen: ${error.message}`, "error");
+        return;
+    }
+
+    upsertItem(data);
+    renderItems();
+
+    deletedItemForUndo = null;
+    undoToast.hidden = true;
+
+    if (undoTimerId !== null) {
+        window.clearTimeout(undoTimerId);
+        undoTimerId = null;
+    }
+}
+
+function openCategoryModal() {
+    categoryModal.hidden = false;
+    document.body.classList.add("modal-open");
+    categorySearchInput.value = "";
+    renderCategoryManager();
+
+    window.setTimeout(() => {
+        categorySearchInput.focus();
+    }, 0);
+}
+
+function closeCategoryModal() {
+    categoryModal.hidden = true;
+    document.body.classList.remove("modal-open");
+}
+
+function createCategoryFromManager() {
+    const newCategory = managerCategoryInput.value.trim();
+
+    if (newCategory === "") {
+        return;
+    }
+
+    const exists = getAvailableCategories().some(
+        (category) =>
+            category.toLowerCase() === newCategory.toLowerCase()
+    );
+
+    if (!exists) {
+        customCategories.push(newCategory);
+        saveCustomCategories();
+    }
+
+    managerCategoryInput.value = "";
+    refreshCategoryOptions();
+    renderCategoryManager();
+}
+
+function renderCategoryManager() {
+    const searchTerm = categorySearchInput.value.trim().toLowerCase();
+    const categories = getAvailableCategories().filter((category) =>
+        category.toLowerCase().includes(searchTerm)
+    );
+
+    categoryManagerList.innerHTML = "";
+
+    if (categories.length === 0) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "category-manager-empty";
+        emptyMessage.textContent = "Keine Kategorien gefunden.";
+        categoryManagerList.appendChild(emptyMessage);
+        return;
+    }
+
+    categories.forEach((category) => {
+        const row = document.createElement("div");
+        row.className = "category-manager-item";
+
+        const info = document.createElement("div");
+        info.className = "category-manager-item-info";
+
+        const name = document.createElement("p");
+        name.className = "category-manager-item-name";
+        name.textContent = category;
+
+        const count = document.createElement("p");
+        count.className = "category-manager-item-count";
+        const usageCount = getCategoryUsageCount(category);
+        count.textContent =
+            usageCount === 1
+                ? "1 Artikel"
+                : `${usageCount} Artikel`;
+
+        info.appendChild(name);
+        info.appendChild(count);
+
+        const actions = document.createElement("div");
+        actions.className = "category-manager-actions";
+
+        const isDefaultCategory = DEFAULT_CATEGORIES.includes(category);
+
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.textContent = "✏️";
+        editButton.title = "Kategorie umbenennen";
+        editButton.addEventListener("click", () => {
+            renameCategory(category);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "category-delete";
+        deleteButton.textContent = "🗑️";
+        deleteButton.title = isDefaultCategory
+            ? "Standardkategorien können nicht gelöscht werden"
+            : "Kategorie löschen";
+        deleteButton.disabled = isDefaultCategory;
+
+        if (!isDefaultCategory) {
+            deleteButton.addEventListener("click", () => {
+                deleteCategory(category);
+            });
+        }
+
+        actions.appendChild(editButton);
+        actions.appendChild(deleteButton);
+
+        row.appendChild(info);
+        row.appendChild(actions);
+        categoryManagerList.appendChild(row);
+    });
+}
+
+async function renameCategory(oldCategory) {
+    const newCategory = window.prompt(
+        `Neuer Name für "${oldCategory}":`,
+        oldCategory
+    );
+
+    if (newCategory === null) {
+        return;
+    }
+
+    const trimmedCategory = newCategory.trim();
+
+    if (
+        trimmedCategory === "" ||
+        trimmedCategory.toLowerCase() === oldCategory.toLowerCase()
+    ) {
+        return;
+    }
+
+    const alreadyExists = getAvailableCategories().some(
+        (category) =>
+            category.toLowerCase() === trimmedCategory.toLowerCase()
+    );
+
+    if (alreadyExists) {
+        setStatus("Diese Kategorie gibt es bereits.", "error");
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from("shopping_items")
+        .update({ category: trimmedCategory })
+        .eq("list_id", currentListId)
+        .eq("category", oldCategory);
+
+    if (error) {
+        setStatus(`Kategorie konnte nicht umbenannt werden: ${error.message}`, "error");
+        return;
+    }
+
+    const customIndex = customCategories.findIndex(
+        (category) => category === oldCategory
+    );
+
+    if (customIndex >= 0) {
+        customCategories[customIndex] = trimmedCategory;
+        saveCustomCategories();
+    }
+
+    items = items.map((item) =>
+        item.category === oldCategory
+            ? { ...item, category: trimmedCategory }
+            : item
+    );
+
+    refreshCategoryOptions();
+    renderItems();
+    renderCategoryManager();
+}
+
+async function deleteCategory(category) {
+    if (DEFAULT_CATEGORIES.includes(category)) {
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from("shopping_items")
+        .update({ category: "" })
+        .eq("list_id", currentListId)
+        .eq("category", category);
+
+    if (error) {
+        setStatus(`Kategorie konnte nicht gelöscht werden: ${error.message}`, "error");
+        return;
+    }
+
+    customCategories = customCategories.filter(
+        (currentCategory) => currentCategory !== category
+    );
+    saveCustomCategories();
+
+    items = items.map((item) =>
+        item.category === category
+            ? { ...item, category: "" }
+            : item
+    );
+
+    if (currentCategoryFilter === category) {
+        currentCategoryFilter = "all";
+    }
+
+    refreshCategoryOptions();
+    renderItems();
+    renderCategoryManager();
+}
+
 function refreshEditCategoryOptions(selectedCategory = "") {
     const categories = getAvailableCategories();
 
@@ -750,12 +1117,12 @@ function renderItems() {
 
         content.appendChild(name);
 
-if (item.category) {
-    const category = document.createElement("span");
-    category.className = "item-category";
-    category.textContent = item.category;
-    content.appendChild(category);
-}
+        if (item.category) {
+            const category = document.createElement("span");
+            category.className = "item-category";
+            category.textContent = item.category;
+            content.appendChild(category);
+        }
 
         const actions = document.createElement("div");
         actions.className = "item-actions";
