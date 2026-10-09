@@ -12,8 +12,6 @@ const itemCount = document.getElementById("item-count");
 const remainingCount = document.getElementById("remaining-count");
 const clearCompletedButton = document.getElementById("clear-completed");
 const categoryFilter = document.getElementById("category-filter");
-const customCategoryInput = document.getElementById("custom-category");
-const addCategoryButton = document.getElementById("add-category");
 const editModal = document.getElementById("edit-modal");
 const editForm = document.getElementById("edit-form");
 const editItemNameInput = document.getElementById("edit-item-name");
@@ -250,12 +248,7 @@ function refreshCategoryOptions() {
     }
 }
 
-function addCustomCategory() {
-    const newCategory = customCategoryInput.value.trim();
 
-    if (newCategory === "") {
-        return;
-    }
 
     const alreadyExists = getAvailableCategories().some(
         (category) => category.toLowerCase() === newCategory.toLowerCase()
@@ -307,7 +300,6 @@ function initializeShareUi() {
 }
 
 function setupEventHandlers() {
-    addCategoryButton.addEventListener("click", addCustomCategory);
 
     closeEditModalButton.addEventListener("click", closeEditModal);
     cancelEditButton.addEventListener("click", closeEditModal);
@@ -357,11 +349,6 @@ function setupEventHandlers() {
 
     undoDeleteButton.addEventListener("click", undoLastDelete);
 
-    customCategoryInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            addCustomCategory();
-        }
     });
 
     copyLinkButton.addEventListener("click", async () => {
