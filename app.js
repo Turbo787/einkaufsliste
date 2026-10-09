@@ -12,6 +12,8 @@ const itemCount = document.getElementById("item-count");
 const remainingCount = document.getElementById("remaining-count");
 const clearCompletedButton = document.getElementById("clear-completed");
 const categoryFilter = document.getElementById("category-filter");
+const customCategoryInput = document.getElementById("custom-category");
+const addCategoryButton = document.getElementById("add-category");
 const filterButtons = document.querySelectorAll(".filter-button");
 const connectionStatus = document.getElementById("connection-status");
 const shareLinkInput = document.getElementById("share-link");
@@ -30,6 +32,18 @@ const UUID_V4_REGEX =
 
 const currentListId = resolveListId();
 const POLLING_INTERVAL_MS = 30_000;
+const DEFAULT_CATEGORIES = [
+    "Lebensmittel",
+    "Getränke",
+    "Haushalt",
+    "Obst & Gemüse",
+    "Sonstiges"
+];
+
+const CUSTOM_CATEGORIES_STORAGE_KEY =
+    `shopping-list-custom-categories-${currentListId}`;
+
+let customCategories = loadCustomCategories();
 
 let isRefreshing = false;
 let pollingTimerId = null;
@@ -84,6 +98,128 @@ initializeShareUi();
 setupEventHandlers();
 initializeApp();
 
+function loadCustomCategories() {
+    try {
+        const savedCategories = window.localStorage.getItem(
+            CUSTOM_CATEGORIES_STORAGE_KEY
+        );
+
+        if (!savedCategories) {
+            return [];
+        }
+
+        const parsedCategories = JSON.parse(savedCategories);
+
+        if (!Array.isArray(parsedCategories)) {
+            return [];
+        }
+
+        return parsedCategories
+            .map((category) => String(category).trim())
+            .filter(Boolean);
+    } catch (error) {
+        console.warn("Eigene Kategorien konnten nicht geladen werden:", error);
+        return [];
+    }
+}
+
+function saveCustomCategories() {
+    window.localStorage.setItem(
+        CUSTOM_CATEGORIES_STORAGE_KEY,
+        JSON.stringify(customCategories)
+    );
+}
+
+function getAvailableCategories() {
+    const categories = new Set(DEFAULT_CATEGORIES);
+
+    customCategories.forEach((category) => {
+        if (category.trim() !== "") {
+            categories.add(category.trim());
+        }
+    });
+
+    items.forEach((item) => {
+        if (item.category && item.category.trim() !== "") {
+            categories.add(item.category.trim());
+        }
+    });
+
+    return Array.from(categories);
+}
+
+function refreshCategoryOptions() {
+    const selectedItemCategory = itemCategoryInput.value;
+    const selectedFilterCategory = categoryFilter.value;
+
+    const categories = getAvailableCategories();
+
+    itemCategoryInput.innerHTML = "";
+
+    const emptyCategoryOption = document.createElement("option");
+    emptyCategoryOption.value = "";
+    emptyCategoryOption.textContent = "— Bitte wählen —";
+    itemCategoryInput.appendChild(emptyCategoryOption);
+
+    categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        itemCategoryInput.appendChild(option);
+    });
+
+    if (categories.includes(selectedItemCategory)) {
+        itemCategoryInput.value = selectedItemCategory;
+    } else {
+        itemCategoryInput.value = "";
+    }
+
+    categoryFilter.innerHTML = "";
+
+    const allCategoriesOption = document.createElement("option");
+    allCategoriesOption.value = "all";
+    allCategoriesOption.textContent = "Alle Kategorien";
+    categoryFilter.appendChild(allCategoriesOption);
+
+    categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        categoryFilter.appendChild(option);
+    });
+
+    if (
+        selectedFilterCategory === "all" ||
+        categories.includes(selectedFilterCategory)
+    ) {
+        categoryFilter.value = selectedFilterCategory;
+    } else {
+        categoryFilter.value = "all";
+        currentCategoryFilter = "all";
+    }
+}
+
+function addCustomCategory() {
+    const newCategory = customCategoryInput.value.trim();
+
+    if (newCategory === "") {
+        return;
+    }
+
+    const alreadyExists = getAvailableCategories().some(
+        (category) => category.toLowerCase() === newCategory.toLowerCase()
+    );
+
+    if (!alreadyExists) {
+        customCategories.push(newCategory);
+        saveCustomCategories();
+    }
+
+    refreshCategoryOptions();
+    itemCategoryInput.value = newCategory;
+    customCategoryInput.value = "";
+    itemCategoryInput.focus();
+}
 function resolveListId() {
     const url = new URL(window.location.href);
     const listId = (url.searchParams.get(LIST_ID_PARAM) || "").trim();
@@ -120,6 +256,16 @@ function initializeShareUi() {
 }
 
 function setupEventHandlers() {
+    addCategoryButton.addEventListener("click", addCustomCategory);
+
+    customCategoryInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            addCustomCategory();
+        }
+    });
+
+    copyLinkButton.addEventListener("click", async () => {
     copyLinkButton.addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText(shareLinkInput.value);
