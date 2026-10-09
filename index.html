@@ -84,6 +84,13 @@
         </button>
     </div>
 </div>
+                <button
+    id="manage-categories"
+    class="category-manager-button"
+    type="button"
+>
+    Kategorien verwalten
+</button>
 
                 <button class="primary-button" type="submit">
                     <span>＋</span>
@@ -195,6 +202,74 @@
     </form>
 </div>
 
+<div id="category-modal" class="modal-backdrop" hidden>
+    <section
+        class="edit-modal category-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="category-modal-title"
+    >
+        <div class="edit-modal-header">
+            <div>
+                <p class="eyebrow">Organisation</p>
+                <h2 id="category-modal-title">Kategorien verwalten</h2>
+            </div>
+
+            <button
+                id="close-category-modal"
+                class="modal-close-button"
+                type="button"
+                aria-label="Kategorien schließen"
+            >
+                ×
+            </button>
+        </div>
+
+        <div class="category-manager-toolbar">
+            <input
+                id="category-search"
+                type="search"
+                placeholder="Kategorie suchen..."
+                aria-label="Kategorie suchen"
+            >
+
+            <select id="category-sort">
+                <option value="name">Alphabetisch</option>
+                <option value="usage">Am häufigsten genutzt</option>
+            </select>
+        </div>
+
+        <div class="category-create-row">
+            <input
+                id="manager-category-input"
+                type="text"
+                maxlength="80"
+                placeholder="Neue Kategorie"
+            >
+
+            <button
+                id="manager-add-category"
+                class="primary-button"
+                type="button"
+            >
+                Hinzufügen
+            </button>
+        </div>
+
+        <p class="category-manager-hint">
+            Standardkategorien können nicht gelöscht werden. Eigene Kategorien
+            kannst du umbenennen oder löschen.
+        </p>
+
+        <div id="category-manager-list" class="category-manager-list"></div>
+    </section>
+</div>
+
+<div id="undo-toast" class="undo-toast" hidden>
+    <span id="undo-message">Artikel gelöscht.</span>
+    <button id="undo-delete" type="button">Rückgängig</button>
+</div>
+    
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 </body>
