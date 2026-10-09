@@ -60,15 +60,30 @@
                 </div>
 
                 <div class="input-group">
-                    <label for="item-category">Kategorie</label>
-                    <select id="item-category">
-                        <option value="Lebensmittel">Lebensmittel</option>
-                        <option value="Getränke">Getränke</option>
-                        <option value="Haushalt">Haushalt</option>
-                        <option value="Obst & Gemüse">Obst & Gemüse</option>
-                        <option value="Sonstiges">Sonstiges</option>
-                    </select>
-                </div>
+    <label for="item-category">Kategorie</label>
+    <select id="item-category">
+        <option value="">— Bitte wählen —</option>
+    </select>
+</div>
+
+<div class="input-group custom-category-group">
+    <label for="custom-category">Neue Kategorie</label>
+    <div class="custom-category-row">
+        <input
+            id="custom-category"
+            type="text"
+            maxlength="80"
+            placeholder="Zum Beispiel: Tierbedarf"
+        >
+        <button
+            id="add-category"
+            class="secondary-button"
+            type="button"
+        >
+            Hinzufügen
+        </button>
+    </div>
+</div>
 
                 <button class="primary-button" type="submit">
                     <span>＋</span>
@@ -94,13 +109,8 @@
             </div>
 
             <select id="category-filter" class="category-filter">
-                <option value="all">Alle Kategorien</option>
-                <option value="Lebensmittel">Lebensmittel</option>
-                <option value="Getränke">Getränke</option>
-                <option value="Haushalt">Haushalt</option>
-                <option value="Obst & Gemüse">Obst & Gemüse</option>
-                <option value="Sonstiges">Sonstiges</option>
-            </select>
+    <option value="all">Alle Kategorien</option>
+</select>
 
         </section>
 
