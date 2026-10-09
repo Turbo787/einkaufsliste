@@ -1,3 +1,8 @@
+const CONFIG = {
+    SUPABASE_URL: "DEINE_SUPABASE_URL_HIER_EINFUEGEN",
+    SUPABASE_ANON_KEY: "DEIN_SUPABASE_ANON_KEY_HIER_EINFUEGEN"
+};
+
 const itemForm = document.getElementById("item-form");
 const itemNameInput = document.getElementById("item-name");
 const itemCategoryInput = document.getElementById("item-category");
@@ -8,23 +13,435 @@ const remainingCount = document.getElementById("remaining-count");
 const clearCompletedButton = document.getElementById("clear-completed");
 const categoryFilter = document.getElementById("category-filter");
 const filterButtons = document.querySelectorAll(".filter-button");
+const connectionStatus = document.getElementById("connection-status");
+const shareLinkInput = document.getElementById("share-link");
+const copyLinkButton = document.getElementById("copy-link");
+const listIdDisplay = document.getElementById("list-id-display");
 
-let items = JSON.parse(localStorage.getItem("shopping-items")) || [];
-
+let supabaseClient = null;
+let realtimeChannel = null;
+let items = [];
 let currentStatusFilter = "all";
 let currentCategoryFilter = "all";
 
-function saveItems() {
-    localStorage.setItem("shopping-items", JSON.stringify(items));
+const LIST_ID_PARAM = "list";
+const UUID_V4_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const currentListId = resolveListId();
+
+initializeShareUi();
+setupEventHandlers();
+initializeApp();
+
+function resolveListId() {
+    const url = new URL(window.location.href);
+    const listId = (url.searchParams.get(LIST_ID_PARAM) || "").trim();
+
+    if (isValidUuid(listId)) {
+        return listId;
+    }
+
+    const newListId = generateListId();
+    url.searchParams.set(LIST_ID_PARAM, newListId);
+    window.history.replaceState({}, "", url.toString());
+    return newListId;
 }
 
-function createItem(name, category) {
+function generateListId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+        const random = Math.floor(Math.random() * 16);
+        const value = char === "x" ? random : (random & 0x3) | 0x8;
+        return value.toString(16);
+    });
+}
+
+function isValidUuid(value) {
+    return UUID_V4_REGEX.test(value);
+}
+
+function initializeShareUi() {
+    shareLinkInput.value = window.location.href;
+    listIdDisplay.textContent = `Listen-ID: ${currentListId}`;
+}
+
+function setupEventHandlers() {
+    copyLinkButton.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(shareLinkInput.value);
+            copyLinkButton.textContent = "Kopiert!";
+            window.setTimeout(() => {
+                copyLinkButton.textContent = "Link kopieren";
+            }, 1500);
+        } catch (error) {
+            setStatus("Link konnte nicht kopiert werden.", "error");
+        }
+    });
+
+    itemForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!supabaseClient) {
+            return;
+        }
+
+        const name = itemNameInput.value.trim();
+        const category = itemCategoryInput.value;
+
+        if (name === "") {
+            return;
+        }
+
+        const { data, error } = await supabaseClient
+            .from("shopping_items")
+            .insert({
+                list_id: currentListId,
+                name: name,
+                category: category,
+                completed: false
+            })
+            .select()
+            .single();
+
+        if (error) {
+            setStatus(`Speichern fehlgeschlagen: ${error.message}`, "error");
+            return;
+        }
+
+        upsertItem(data);
+        renderItems();
+
+        itemForm.reset();
+        itemNameInput.focus();
+    });
+
+    shoppingList.addEventListener("click", async (event) => {
+        if (!supabaseClient) {
+            return;
+        }
+
+        const clickedButton = event.target.closest("button");
+
+        if (!clickedButton) {
+            return;
+        }
+
+        const action = clickedButton.dataset.action;
+        const itemId = clickedButton.dataset.id;
+        const item = items.find((currentItem) => currentItem.id === itemId);
+
+        if (!item) {
+            return;
+        }
+
+        if (action === "toggle") {
+            const { data, error } = await supabaseClient
+                .from("shopping_items")
+                .update({ completed: !item.completed })
+                .eq("id", itemId)
+                .eq("list_id", currentListId)
+                .select()
+                .single();
+
+            if (error) {
+                setStatus(`Aktualisieren fehlgeschlagen: ${error.message}`, "error");
+                return;
+            }
+
+            upsertItem(data);
+            renderItems();
+        }
+
+        if (action === "edit") {
+            const newName = window.prompt("Artikel bearbeiten:", item.name);
+
+            if (newName === null) {
+                return;
+            }
+
+            const trimmedName = newName.trim();
+
+            if (trimmedName === "") {
+                return;
+            }
+
+            const { data, error } = await supabaseClient
+                .from("shopping_items")
+                .update({ name: trimmedName })
+                .eq("id", itemId)
+                .eq("list_id", currentListId)
+                .select()
+                .single();
+
+            if (error) {
+                setStatus(`Bearbeiten fehlgeschlagen: ${error.message}`, "error");
+                return;
+            }
+
+            upsertItem(data);
+            renderItems();
+        }
+
+        if (action === "delete") {
+            const confirmed = window.confirm(
+                `Möchtest du "${item.name}" wirklich löschen?`
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from("shopping_items")
+                .delete()
+                .eq("id", itemId)
+                .eq("list_id", currentListId);
+
+            if (error) {
+                setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
+                return;
+            }
+
+            removeItem(itemId);
+            renderItems();
+        }
+    });
+
+    filterButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            filterButtons.forEach((filterButton) => {
+                filterButton.classList.remove("active");
+            });
+
+            button.classList.add("active");
+            currentStatusFilter = button.dataset.filter;
+            renderItems();
+        });
+    });
+
+    categoryFilter.addEventListener("change", () => {
+        currentCategoryFilter = categoryFilter.value;
+        renderItems();
+    });
+
+    clearCompletedButton.addEventListener("click", async () => {
+        if (!supabaseClient) {
+            return;
+        }
+
+        const completedItems = items.filter((item) => item.completed);
+
+        if (completedItems.length === 0) {
+            window.alert("Es gibt keine erledigten Artikel.");
+            return;
+        }
+
+        const confirmed = window.confirm(
+            "Möchtest du alle erledigten Artikel löschen?"
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        const { error } = await supabaseClient
+            .from("shopping_items")
+            .delete()
+            .eq("list_id", currentListId)
+            .eq("completed", true);
+
+        if (error) {
+            setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
+            return;
+        }
+
+        items = items.filter((item) => !item.completed);
+        renderItems();
+    });
+
+    window.addEventListener("offline", () => {
+        setStatus("Offline: Verbindung unterbrochen.", "error");
+    });
+
+    window.addEventListener("online", async () => {
+        setStatus("Verbindung wird wiederhergestellt...", "loading");
+
+        if (supabaseClient) {
+            await fetchItems();
+        }
+    });
+}
+
+async function initializeApp() {
+    renderItems();
+    setStatus("Verbindung wird aufgebaut...", "loading");
+
+    if (!window.supabase || typeof window.supabase.createClient !== "function") {
+        setStatus(
+            "Supabase-Bibliothek nicht geladen. Bitte Seite neu laden.",
+            "error"
+        );
+        return;
+    }
+
+    if (!isConfigValid()) {
+        setStatus(
+            "Bitte SUPABASE_URL und SUPABASE_ANON_KEY oben in app.js eintragen.",
+            "error"
+        );
+        emptyState.querySelector("p").textContent =
+            "Konfiguration fehlt: Öffne app.js und trage deine Supabase-Daten ein.";
+        return;
+    }
+
+    supabaseClient = window.supabase.createClient(
+        CONFIG.SUPABASE_URL,
+        CONFIG.SUPABASE_ANON_KEY,
+        {
+            global: {
+                headers: {
+                    "x-list-id": currentListId
+                }
+            }
+        }
+    );
+
+    subscribeToRealtime();
+    await fetchItems();
+}
+
+function isConfigValid() {
+    const hasValues =
+        CONFIG.SUPABASE_URL &&
+        CONFIG.SUPABASE_ANON_KEY &&
+        CONFIG.SUPABASE_URL.trim() !== "" &&
+        CONFIG.SUPABASE_ANON_KEY.trim() !== "";
+
+    if (!hasValues) {
+        return false;
+    }
+
+    const containsPlaceholder =
+        CONFIG.SUPABASE_URL.includes("DEINE_SUPABASE_URL") ||
+        CONFIG.SUPABASE_ANON_KEY.includes("DEIN_SUPABASE_ANON_KEY");
+
+    return !containsPlaceholder;
+}
+
+function subscribeToRealtime() {
+    if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+    }
+
+    realtimeChannel = supabaseClient
+        .channel(`shopping_items:${currentListId}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "shopping_items",
+                filter: `list_id=eq.${currentListId}`
+            },
+            (payload) => {
+                upsertItem(payload.new);
+                renderItems();
+            }
+        )
+        .on(
+            "postgres_changes",
+            {
+                event: "UPDATE",
+                schema: "public",
+                table: "shopping_items",
+                filter: `list_id=eq.${currentListId}`
+            },
+            (payload) => {
+                upsertItem(payload.new);
+                renderItems();
+            }
+        )
+        .on(
+            "postgres_changes",
+            {
+                event: "DELETE",
+                schema: "public",
+                table: "shopping_items",
+                filter: `list_id=eq.${currentListId}`
+            },
+            (payload) => {
+                removeItem(payload.old.id);
+                renderItems();
+            }
+        )
+        .subscribe((status) => {
+            if (status === "SUBSCRIBED") {
+                setStatus("Verbunden und live synchronisiert.", "connected");
+                return;
+            }
+
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+                setStatus("Live-Synchronisierung gestört. Bitte neu laden.", "error");
+                return;
+            }
+
+            if (status === "CLOSED") {
+                setStatus("Verbindung geschlossen.", "error");
+            }
+        });
+}
+
+async function fetchItems() {
+    if (!supabaseClient) {
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from("shopping_items")
+        .select("id, list_id, name, category, completed, created_at, updated_at")
+        .eq("list_id", currentListId)
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        setStatus(`Laden fehlgeschlagen: ${error.message}`, "error");
+        return;
+    }
+
+    items = Array.isArray(data) ? data.map(normalizeItem) : [];
+    renderItems();
+    setStatus("Liste geladen.", "connected");
+}
+
+function normalizeItem(rawItem) {
     return {
-        id: Date.now(),
-        name: name,
-        category: category,
-        completed: false
+        id: rawItem.id,
+        list_id: rawItem.list_id,
+        name: String(rawItem.name ?? ""),
+        category: String(rawItem.category ?? "Sonstiges"),
+        completed: Boolean(rawItem.completed),
+        created_at: rawItem.created_at,
+        updated_at: rawItem.updated_at
     };
+}
+
+function upsertItem(rawItem) {
+    const item = normalizeItem(rawItem);
+    const existingIndex = items.findIndex((entry) => entry.id === item.id);
+
+    if (existingIndex >= 0) {
+        items[existingIndex] = item;
+        return;
+    }
+
+    items.unshift(item);
+}
+
+function removeItem(itemId) {
+    items = items.filter((item) => item.id !== itemId);
 }
 
 function getVisibleItems() {
@@ -44,7 +461,6 @@ function getVisibleItems() {
 
 function renderItems() {
     const visibleItems = getVisibleItems();
-
     shoppingList.innerHTML = "";
 
     if (visibleItems.length === 0) {
@@ -55,50 +471,60 @@ function renderItems() {
 
     visibleItems.forEach((item) => {
         const listItem = document.createElement("li");
-
         listItem.className = "shopping-item";
 
         if (item.completed) {
             listItem.classList.add("completed");
         }
 
-        listItem.innerHTML = `
-            <button
-                class="checkbox ${item.completed ? "checked" : ""}"
-                data-action="toggle"
-                data-id="${item.id}"
-                aria-label="Artikel erledigen"
-            ></button>
+        const checkboxButton = document.createElement("button");
+        checkboxButton.className = "checkbox";
+        if (item.completed) {
+            checkboxButton.classList.add("checked");
+        }
+        checkboxButton.dataset.action = "toggle";
+        checkboxButton.dataset.id = item.id;
+        checkboxButton.setAttribute("aria-label", "Artikel erledigen");
 
-            <div class="item-content">
-                <p class="item-name">${escapeHtml(item.name)}</p>
-                <span class="item-category">
-                    ${escapeHtml(item.category)}
-                </span>
-            </div>
+        const content = document.createElement("div");
+        content.className = "item-content";
 
-            <div class="item-actions">
-                <button
-                    class="icon-button"
-                    data-action="edit"
-                    data-id="${item.id}"
-                    title="Artikel bearbeiten"
-                    aria-label="Artikel bearbeiten"
-                >
-                    ✏️
-                </button>
+        const name = document.createElement("p");
+        name.className = "item-name";
+        name.textContent = item.name;
 
-                <button
-                    class="icon-button delete"
-                    data-action="delete"
-                    data-id="${item.id}"
-                    title="Artikel löschen"
-                    aria-label="Artikel löschen"
-                >
-                    🗑️
-                </button>
-            </div>
-        `;
+        const category = document.createElement("span");
+        category.className = "item-category";
+        category.textContent = item.category;
+
+        content.appendChild(name);
+        content.appendChild(category);
+
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+
+        const editButton = document.createElement("button");
+        editButton.className = "icon-button";
+        editButton.dataset.action = "edit";
+        editButton.dataset.id = item.id;
+        editButton.setAttribute("title", "Artikel bearbeiten");
+        editButton.setAttribute("aria-label", "Artikel bearbeiten");
+        editButton.textContent = "✏️";
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "icon-button delete";
+        deleteButton.dataset.action = "delete";
+        deleteButton.dataset.id = item.id;
+        deleteButton.setAttribute("title", "Artikel löschen");
+        deleteButton.setAttribute("aria-label", "Artikel löschen");
+        deleteButton.textContent = "🗑️";
+
+        actions.appendChild(editButton);
+        actions.appendChild(deleteButton);
+
+        listItem.appendChild(checkboxButton);
+        listItem.appendChild(content);
+        listItem.appendChild(actions);
 
         shoppingList.appendChild(listItem);
     });
@@ -114,119 +540,11 @@ function updateCounters() {
         totalItems === 1 ? "1 Artikel" : `${totalItems} Artikel`;
 
     remainingCount.textContent =
-        openItems === 1
-            ? "1 offener Artikel"
-            : `${openItems} offene Artikel`;
+        openItems === 1 ? "1 offener Artikel" : `${openItems} offene Artikel`;
 }
 
-function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.textContent = value;
-    return div.innerHTML;
+function setStatus(message, mode) {
+    connectionStatus.textContent = message;
+    connectionStatus.classList.remove("loading", "connected", "error");
+    connectionStatus.classList.add(mode);
 }
-
-itemForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-
-    const name = itemNameInput.value.trim();
-    const category = itemCategoryInput.value;
-
-    if (name === "") {
-        return;
-    }
-
-    const newItem = createItem(name, category);
-
-    items.unshift(newItem);
-
-    saveItems();
-    renderItems();
-
-    itemForm.reset();
-    itemNameInput.focus();
-});
-
-shoppingList.addEventListener("click", (event) => {
-    const clickedButton = event.target.closest("button");
-
-    if (!clickedButton) {
-        return;
-    }
-
-    const action = clickedButton.dataset.action;
-    const itemId = Number(clickedButton.dataset.id);
-
-    const item = items.find((currentItem) => currentItem.id === itemId);
-
-    if (!item) {
-        return;
-    }
-
-    if (action === "toggle") {
-        item.completed = !item.completed;
-    }
-
-    if (action === "edit") {
-        const newName = prompt("Artikel bearbeiten:", item.name);
-
-        if (newName !== null && newName.trim() !== "") {
-            item.name = newName.trim();
-        }
-    }
-
-    if (action === "delete") {
-        const confirmed = confirm(
-            `Möchtest du "${item.name}" wirklich löschen?`
-        );
-
-        if (confirmed) {
-            items = items.filter(
-                (currentItem) => currentItem.id !== itemId
-            );
-        }
-    }
-
-    saveItems();
-    renderItems();
-});
-
-filterButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-        filterButtons.forEach((filterButton) => {
-            filterButton.classList.remove("active");
-        });
-
-        button.classList.add("active");
-
-        currentStatusFilter = button.dataset.filter;
-
-        renderItems();
-    });
-});
-
-categoryFilter.addEventListener("change", () => {
-    currentCategoryFilter = categoryFilter.value;
-    renderItems();
-});
-
-clearCompletedButton.addEventListener("click", () => {
-    const completedItems = items.filter((item) => item.completed);
-
-    if (completedItems.length === 0) {
-        alert("Es gibt keine erledigten Artikel.");
-        return;
-    }
-
-    const confirmed = confirm(
-        "Möchtest du alle erledigten Artikel löschen?"
-    );
-
-    if (confirmed) {
-        items = items.filter((item) => !item.completed);
-
-        saveItems();
-        renderItems();
-    }
-});
-
-renderItems();
