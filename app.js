@@ -612,11 +612,6 @@ function openCategoryModal() {
     }, 0);
 }
 
-    window.setTimeout(() => {
-        categorySearchInput.focus();
-    }, 0);
-}
-
 function closeCategoryModal() {
     categoryModal.hidden = true;
 
@@ -624,6 +619,7 @@ function closeCategoryModal() {
         document.body.classList.remove("modal-open");
     }
 }
+
 
 function createCategoryFromManager() {
     const newCategory = managerCategoryInput.value.trim();
