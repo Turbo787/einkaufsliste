@@ -1310,3 +1310,21 @@ body.modal-open {
         justify-content: space-between;
     }
 }
+/* Versteckte Fenster müssen wirklich unsichtbar bleiben */
+#edit-modal[hidden],
+#category-modal[hidden],
+#undo-toast[hidden] {
+    display: none !important;
+}
+
+/* Nur sichtbare Fenster bekommen ihr jeweiliges Layout */
+#edit-modal:not([hidden]) {
+    display: grid;
+    place-items: center;
+}
+
+#category-modal:not([hidden]) {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+}
