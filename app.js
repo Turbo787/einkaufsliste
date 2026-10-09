@@ -600,6 +600,8 @@ async function undoLastDelete() {
 }
 
 function openCategoryModal() {
+    closeEditModal();
+
     categoryModal.hidden = false;
     document.body.classList.add("modal-open");
     categorySearchInput.value = "";
@@ -610,9 +612,17 @@ function openCategoryModal() {
     }, 0);
 }
 
+    window.setTimeout(() => {
+        categorySearchInput.focus();
+    }, 0);
+}
+
 function closeCategoryModal() {
     categoryModal.hidden = true;
-    document.body.classList.remove("modal-open");
+
+    if (editModal.hidden) {
+        document.body.classList.remove("modal-open");
+    }
 }
 
 function createCategoryFromManager() {
@@ -831,6 +841,8 @@ function refreshEditCategoryOptions(selectedCategory = "") {
 }
 
 function openEditModal(item) {
+    closeCategoryModal();
+
     editingItemId = item.id;
 
     editItemNameInput.value = item.name;
@@ -847,8 +859,11 @@ function openEditModal(item) {
 
 function closeEditModal() {
     editModal.hidden = true;
-    document.body.classList.remove("modal-open");
     editingItemId = null;
+
+    if (categoryModal.hidden) {
+        document.body.classList.remove("modal-open");
+    }
 }
 
 async function saveEditedItem(event) {
