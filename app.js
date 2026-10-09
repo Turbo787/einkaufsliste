@@ -248,22 +248,6 @@ function refreshCategoryOptions() {
     }
 }
 
-
-
-    const alreadyExists = getAvailableCategories().some(
-        (category) => category.toLowerCase() === newCategory.toLowerCase()
-    );
-
-    if (!alreadyExists) {
-        customCategories.push(newCategory);
-        saveCustomCategories();
-    }
-
-    refreshCategoryOptions();
-    itemCategoryInput.value = newCategory;
-    customCategoryInput.value = "";
-    itemCategoryInput.focus();
-}
 function resolveListId() {
     const url = new URL(window.location.href);
     const listId = (url.searchParams.get(LIST_ID_PARAM) || "").trim();
@@ -345,7 +329,6 @@ function setupEventHandlers() {
             event.preventDefault();
             createCategoryFromManager();
         }
-    });
 
     undoDeleteButton.addEventListener("click", undoLastDelete);
 
