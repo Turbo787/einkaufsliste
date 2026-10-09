@@ -42,6 +42,18 @@ const filterButtons = document.querySelectorAll(".filter-button");
 const connectionStatus = document.getElementById("connection-status");
 const shareLinkInput = document.getElementById("share-link");
 const copyLinkButton = document.getElementById("copy-link");
+const showQrCodeButton = document.getElementById("show-qr-code");
+const qrModal = document.getElementById("qr-modal");
+const closeQrModalButton =
+    document.getElementById("close-qr-modal");
+const cancelQrModalButton =
+    document.getElementById("cancel-qr-modal");
+const qrCopyLinkButton =
+    document.getElementById("qr-copy-link");
+const qrCodeContainer =
+    document.getElementById("qr-code");
+const qrLinkPreview =
+    document.getElementById("qr-link-preview");
 const listIdDisplay = document.getElementById("list-id-display");
 
 let supabaseClient = null;
@@ -112,9 +124,23 @@ function startPollingFallback() {
 
 startPollingFallback();
 
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        void refreshShoppingList();
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+        return;
+    }
+
+    if (!qrModal.hidden) {
+        closeQrModal();
+        return;
+    }
+
+    if (!categoryModal.hidden) {
+        closeCategoryModal();
+        return;
+    }
+
+    if (!editModal.hidden) {
+        closeEditModal();
     }
 });
 
@@ -123,6 +149,7 @@ window.addEventListener("online", () => {
 });
 
 initializeShareUi();
+
 setupEventHandlers();
 initializeApp();
 
@@ -282,7 +309,53 @@ function initializeShareUi() {
     shareLinkInput.value = window.location.href;
     listIdDisplay.textContent = `Listen-ID: ${currentListId}`;
 }
+function openQrModal() {
+    if (typeof QRCode === "undefined") {
+        setStatus("QR-Code-Bibliothek konnte nicht geladen werden.", "error");
+        return;
+    }
 
+    qrCodeContainer.innerHTML = "";
+    qrLinkPreview.textContent = shareLinkInput.value;
+
+    new QRCode(qrCodeContainer, {
+        text: shareLinkInput.value,
+        width: 210,
+        height: 210,
+        colorDark: "#202332",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+    });
+
+    qrModal.hidden = false;
+    document.body.classList.add("modal-open");
+}
+
+function closeQrModal() {
+    qrModal.hidden = true;
+
+    if (
+        editModal.hidden &&
+        categoryModal.hidden
+    ) {
+        document.body.classList.remove("modal-open");
+    }
+}
+
+async function copyShareLink() {
+    try {
+        await navigator.clipboard.writeText(shareLinkInput.value);
+
+        copyLinkButton.textContent = "Kopiert!";
+
+        window.setTimeout(() => {
+            copyLinkButton.innerHTML =
+                '<span aria-hidden="true">🔗</span> Link kopieren';
+        }, 1500);
+    } catch (error) {
+        setStatus("Link konnte nicht kopiert werden.", "error");
+    }
+}
 function setupEventHandlers() {
 
     closeEditModalButton.addEventListener("click", closeEditModal);
@@ -334,15 +407,25 @@ function setupEventHandlers() {
 
     });
 
-    copyLinkButton.addEventListener("click", async () => {
-        try {
-            await navigator.clipboard.writeText(shareLinkInput.value);
-            copyLinkButton.textContent = "Kopiert!";
-            window.setTimeout(() => {
-                copyLinkButton.textContent = "Link kopieren";
-            }, 1500);
-        } catch (error) {
-            setStatus("Link konnte nicht kopiert werden.", "error");
+        copyLinkButton.addEventListener("click", copyShareLink);
+
+    showQrCodeButton.addEventListener("click", openQrModal);
+
+    closeQrModalButton.addEventListener(
+        "click",
+        closeQrModal
+    );
+
+    cancelQrModalButton.addEventListener(
+        "click",
+        closeQrModal
+    );
+
+    qrCopyLinkButton.addEventListener("click", copyShareLink);
+
+    qrModal.addEventListener("click", (event) => {
+        if (event.target === qrModal) {
+            closeQrModal();
         }
     });
 
