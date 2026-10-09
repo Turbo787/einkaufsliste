@@ -23,27 +23,18 @@ let realtimeChannel = null;
 let items = [];
 let currentStatusFilter = "all";
 let currentCategoryFilter = "all";
+let pollingTimerId = null;
+let inFlightFetchPromise = null;
+let hasLoadedItems = false;
+let lastStatusMessage = "";
+let lastStatusMode = "";
 
 const LIST_ID_PARAM = "list";
 const UUID_V4_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const POLLING_INTERVAL_MS = 30_000;
 
 const currentListId = resolveListId();
-let isRefreshing = false;
-
-window.setInterval(async () => {
-    if (!supabaseClient || !navigator.onLine || isRefreshing) {
-        return;
-    }
-
-    isRefreshing = true;
-
-    try {
-        await fetchItems();
-    } finally {
-        isRefreshing = false;
-    }
-}, 2000);
 
 initializeShareUi();
 setupEventHandlers();
@@ -282,13 +273,25 @@ function setupEventHandlers() {
         setStatus("Offline: Verbindung unterbrochen.", "error");
     });
 
-    window.addEventListener("online", async () => {
+    window.addEventListener("online", () => {
         setStatus("Verbindung wird wiederhergestellt...", "loading");
 
         if (supabaseClient) {
-            await fetchItems();
+            void fetchItems({ showSuccessStatus: true });
         }
     });
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") {
+            return;
+        }
+
+        if (supabaseClient && navigator.onLine) {
+            void fetchItems({ showSuccessStatus: true });
+        }
+    });
+
+    window.addEventListener("beforeunload", cleanupResources);
 }
 
 async function initializeApp() {
@@ -326,7 +329,8 @@ async function initializeApp() {
     );
 
     subscribeToRealtime();
-    await fetchItems();
+    startPollingFallback();
+    await fetchItems({ showSuccessStatus: true });
 }
 
 function isConfigValid() {
@@ -400,7 +404,10 @@ function subscribeToRealtime() {
             }
 
             if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-                setStatus("Live-Synchronisierung gestört. Bitte neu laden.", "error");
+                setStatus(
+                    "Live-Synchronisierung gestört. Hintergrundabgleich aktiv.",
+                    "error"
+                );
                 return;
             }
 
@@ -410,25 +417,116 @@ function subscribeToRealtime() {
         });
 }
 
-async function fetchItems() {
+function startPollingFallback() {
+    stopPollingFallback();
+
+    pollingTimerId = window.setInterval(() => {
+        if (!canRunBackgroundSync()) {
+            return;
+        }
+
+        void fetchItems({ isBackgroundSync: true });
+    }, POLLING_INTERVAL_MS);
+}
+
+function stopPollingFallback() {
+    if (pollingTimerId !== null) {
+        window.clearInterval(pollingTimerId);
+        pollingTimerId = null;
+    }
+}
+
+function canRunBackgroundSync() {
+    return Boolean(
+        supabaseClient &&
+            navigator.onLine &&
+            document.visibilityState === "visible"
+    );
+}
+
+function cleanupResources() {
+    stopPollingFallback();
+
+    if (supabaseClient && realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+    }
+}
+
+async function fetchItems(options = {}) {
     if (!supabaseClient) {
         return;
     }
 
-    const { data, error } = await supabaseClient
-        .from("shopping_items")
-        .select("id, list_id, name, category, completed, created_at, updated_at")
-        .eq("list_id", currentListId)
-        .order("created_at", { ascending: false });
-
-    if (error) {
-        setStatus(`Laden fehlgeschlagen: ${error.message}`, "error");
-        return;
+    if (inFlightFetchPromise) {
+        return inFlightFetchPromise;
     }
 
-    items = Array.isArray(data) ? data.map(normalizeItem) : [];
-    renderItems();
-    setStatus("Liste geladen.", "connected");
+    const { isBackgroundSync = false, showSuccessStatus = false } = options;
+
+    inFlightFetchPromise = (async () => {
+        try {
+            const { data, error } = await supabaseClient
+                .from("shopping_items")
+                .select("id, list_id, name, category, completed, created_at, updated_at")
+                .eq("list_id", currentListId)
+                .order("created_at", { ascending: false });
+
+            if (error) {
+                if (!isBackgroundSync || !hasLoadedItems) {
+                    setStatus(`Laden fehlgeschlagen: ${error.message}`, "error");
+                }
+                return;
+            }
+
+            const nextItems = Array.isArray(data) ? data.map(normalizeItem) : [];
+
+            if (!areItemCollectionsEqual(items, nextItems)) {
+                items = nextItems;
+                renderItems();
+            }
+
+            hasLoadedItems = true;
+
+            if (showSuccessStatus) {
+                setStatus("Liste geladen.", "connected");
+            }
+        } catch (error) {
+            if (!isBackgroundSync || !hasLoadedItems) {
+                setStatus(
+                    `Laden fehlgeschlagen: ${error?.message || "Unbekannter Fehler"}`,
+                    "error"
+                );
+            }
+        } finally {
+            inFlightFetchPromise = null;
+        }
+    })();
+
+    return inFlightFetchPromise;
+}
+
+function areItemCollectionsEqual(currentItems, nextItems) {
+    if (currentItems.length !== nextItems.length) {
+        return false;
+    }
+
+    for (let index = 0; index < currentItems.length; index += 1) {
+        const currentItem = currentItems[index];
+        const nextItem = nextItems[index];
+
+        if (
+            currentItem.id !== nextItem.id ||
+            currentItem.name !== nextItem.name ||
+            currentItem.category !== nextItem.category ||
+            currentItem.completed !== nextItem.completed ||
+            currentItem.updated_at !== nextItem.updated_at
+        ) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function normalizeItem(rawItem) {
@@ -559,6 +657,12 @@ function updateCounters() {
 }
 
 function setStatus(message, mode) {
+    if (lastStatusMessage === message && lastStatusMode === mode) {
+        return;
+    }
+
+    lastStatusMessage = message;
+    lastStatusMode = mode;
     connectionStatus.textContent = message;
     connectionStatus.classList.remove("loading", "connected", "error");
     connectionStatus.classList.add(mode);

@@ -48,6 +48,10 @@ Das Script erstellt:
 
 (Hinweis: Das SQL-Script fügt die Tabelle bereits zur Publication `supabase_realtime` hinzu, falls nötig.)
 
+Die App nutzt **Supabase Realtime als primären Synchronisationsweg** (sofortige Updates bei INSERT/UPDATE/DELETE).
+Zusätzlich läuft ein **vorsichtiger Fallback-Abgleich alle 30 Sekunden**, damit Änderungen weiterhin ankommen, falls Realtime auf einzelnen Geräten kurzfristig keine Events liefert.
+Der Fallback läuft nur, wenn die Seite sichtbar und online ist, und aktualisiert beim Zurückkehren in den Tab bzw. nach Wiederherstellung der Verbindung sofort.
+
 ---
 
 ## 4) Frontend konfigurieren
