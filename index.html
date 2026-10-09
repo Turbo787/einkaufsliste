@@ -25,6 +25,27 @@
             <div class="shopping-icon">🛒</div>
         </header>
 
+        <section class="connection-section" aria-live="polite">
+            <div class="connection-row">
+                <span id="connection-status" class="status-badge loading">
+                    Verbindung wird aufgebaut...
+                </span>
+                <span id="list-id-display" class="list-id-display"></span>
+            </div>
+
+            <div class="share-row">
+                <label class="sr-only" for="share-link">Freigabelink</label>
+                <input id="share-link" type="text" readonly>
+                <button id="copy-link" class="secondary-button" type="button">
+                    Link kopieren
+                </button>
+            </div>
+
+            <p class="share-hint">
+                Jeder mit diesem Link kann diese Liste sehen und bearbeiten.
+            </p>
+        </section>
+
         <section class="add-item-section">
             <form id="item-form">
 
@@ -106,13 +127,14 @@
 
         <footer class="app-footer">
             <span id="remaining-count">0 offene Artikel</span>
-            <span>Wird automatisch gespeichert</span>
+            <span id="sync-note">Synchronisiert über Supabase</span>
         </footer>
 
     </section>
 
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 </body>
 </html>

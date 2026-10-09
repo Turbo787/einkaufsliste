@@ -31,6 +31,18 @@ select {
     font: inherit;
 }
 
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 button {
     cursor: pointer;
 }
@@ -106,6 +118,87 @@ h1 {
 .add-item-section {
     padding: 28px 42px;
     border-bottom: 1px solid var(--border);
+}
+
+.connection-section {
+    padding: 20px 42px 24px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfe;
+}
+
+.connection-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border-radius: 999px;
+}
+
+.status-badge.loading {
+    color: #7a5200;
+    background: #fff4d6;
+}
+
+.status-badge.connected {
+    color: #1b7a50;
+    background: #dff6ea;
+}
+
+.status-badge.error {
+    color: #b03131;
+    background: #ffe3e3;
+}
+
+.list-id-display {
+    color: var(--muted-text);
+    font-size: 0.8rem;
+    word-break: break-word;
+}
+
+.share-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+}
+
+#share-link {
+    width: 100%;
+    height: 42px;
+    padding: 0 12px;
+    color: var(--text);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+}
+
+.secondary-button {
+    height: 42px;
+    padding: 0 14px;
+    color: var(--primary);
+    font-weight: 700;
+    background: #eeedff;
+    border: 1px solid #d9d6ff;
+    border-radius: 11px;
+}
+
+.secondary-button:hover {
+    background: #e4e1ff;
+}
+
+.share-hint {
+    margin: 10px 0 0;
+    color: var(--muted-text);
+    font-size: 0.82rem;
 }
 
 #item-form {
@@ -393,6 +486,7 @@ h1 {
     }
 
     .app-header,
+    .connection-section,
     .add-item-section,
     .toolbar,
     .list-header,
@@ -409,6 +503,10 @@ h1 {
     .toolbar {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .share-row {
+        grid-template-columns: 1fr;
     }
 
     .category-filter {
