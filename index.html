@@ -44,7 +44,12 @@
 
     <button id="copy-link" class="share-button" type="button">
         <span aria-hidden="true">🔗</span>
-        Liste teilen
+        Link kopieren
+    </button>
+
+    <button id="show-qr-code" class="share-button" type="button">
+        <span aria-hidden="true">▦</span>
+        QR-Code
     </button>
 </div>
 
@@ -260,8 +265,54 @@
     <span id="undo-message">Artikel gelöscht.</span>
     <button id="undo-delete" type="button">Rückgängig</button>
 </div>
+
+<div id="qr-modal" class="modal-backdrop" hidden>
+    <section
+        class="edit-modal qr-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qr-modal-title"
+    >
+        <div class="edit-modal-header">
+            <div>
+                <p class="eyebrow">Liste teilen</p>
+                <h2 id="qr-modal-title">QR-Code</h2>
+            </div>
+
+            <button
+                id="close-qr-modal"
+                class="modal-close-button"
+                type="button"
+                aria-label="QR-Code schließen"
+            >
+                ×
+            </button>
+        </div>
+
+        <div id="qr-code" class="qr-code"></div>
+
+        <p class="qr-hint">
+            Scanne diesen Code mit der Kamera deines Smartphones.
+        </p>
+
+        <div class="qr-link-preview">
+            <span id="qr-link-preview"></span>
+        </div>
+
+        <div class="qr-modal-actions">
+            <button id="qr-copy-link" class="primary-button" type="button">
+                Link kopieren
+            </button>
+
+            <button id="cancel-qr-modal" class="secondary-button" type="button">
+                Schließen
+            </button>
+        </div>
+    </section>
+</div>
     
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
