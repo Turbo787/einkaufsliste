@@ -1,6 +1,6 @@
 const CONFIG = {
-    SUPABASE_URL: "DEINE_SUPABASE_URL_HIER_EINFUEGEN",
-    SUPABASE_ANON_KEY: "DEIN_SUPABASE_ANON_KEY_HIER_EINFUEGEN"
+    SUPABASE_URL: "https://wzbzxibuwvxivisoubsw.supabase.co",
+    SUPABASE_ANON_KEY: "sb_publishable_EqBA_Ze1P8dNg5VQ309OSQ_cblNukt6"
 };
 
 const itemForm = document.getElementById("item-form");
