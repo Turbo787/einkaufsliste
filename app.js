@@ -266,7 +266,6 @@ function setupEventHandlers() {
     });
 
     copyLinkButton.addEventListener("click", async () => {
-    copyLinkButton.addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText(shareLinkInput.value);
             copyLinkButton.textContent = "Kopiert!";
@@ -617,7 +616,7 @@ function normalizeItem(rawItem) {
         id: rawItem.id,
         list_id: rawItem.list_id,
         name: String(rawItem.name ?? ""),
-        category: String(rawItem.category ?? "Sonstiges"),
+        category: String(rawItem.category ?? "").trim(),
         completed: Boolean(rawItem.completed),
         created_at: rawItem.created_at,
         updated_at: rawItem.updated_at
@@ -656,6 +655,8 @@ function getVisibleItems() {
 }
 
 function renderItems() {
+    refreshCategoryOptions();
+
     const visibleItems = getVisibleItems();
     shoppingList.innerHTML = "";
 
@@ -689,12 +690,14 @@ function renderItems() {
         name.className = "item-name";
         name.textContent = item.name;
 
-        const category = document.createElement("span");
-        category.className = "item-category";
-        category.textContent = item.category;
-
         content.appendChild(name);
-        content.appendChild(category);
+
+if (item.category) {
+    const category = document.createElement("span");
+    category.className = "item-category";
+    category.textContent = item.category;
+    content.appendChild(category);
+}
 
         const actions = document.createElement("div");
         actions.className = "item-actions";
