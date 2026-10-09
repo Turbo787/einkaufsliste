@@ -14,6 +14,14 @@ const clearCompletedButton = document.getElementById("clear-completed");
 const categoryFilter = document.getElementById("category-filter");
 const customCategoryInput = document.getElementById("custom-category");
 const addCategoryButton = document.getElementById("add-category");
+const editModal = document.getElementById("edit-modal");
+const editForm = document.getElementById("edit-form");
+const editItemNameInput = document.getElementById("edit-item-name");
+const editItemCategoryInput =
+    document.getElementById("edit-item-category");
+const closeEditModalButton =
+    document.getElementById("close-edit-modal");
+const cancelEditButton = document.getElementById("cancel-edit");
 const filterButtons = document.querySelectorAll(".filter-button");
 const connectionStatus = document.getElementById("connection-status");
 const shareLinkInput = document.getElementById("share-link");
@@ -25,6 +33,7 @@ let realtimeChannel = null;
 let items = [];
 let currentStatusFilter = "all";
 let currentCategoryFilter = "all";
+let editingItemId = null;
 
 const LIST_ID_PARAM = "list";
 const UUID_V4_REGEX =
@@ -258,6 +267,17 @@ function initializeShareUi() {
 function setupEventHandlers() {
     addCategoryButton.addEventListener("click", addCustomCategory);
 
+    closeEditModalButton.addEventListener("click", closeEditModal);
+    cancelEditButton.addEventListener("click", closeEditModal);
+
+    editModal.addEventListener("click", (event) => {
+        if (event.target === editModal) {
+            closeEditModal();
+        }
+    });
+
+    editForm.addEventListener("submit", saveEditedItem);
+
     customCategoryInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
@@ -352,58 +372,9 @@ function setupEventHandlers() {
         }
 
         if (action === "edit") {
-            const newName = window.prompt("Artikel bearbeiten:", item.name);
-
-            if (newName === null) {
-                return;
-            }
-
-            const trimmedName = newName.trim();
-
-            if (trimmedName === "") {
-                return;
-            }
-
-            const { data, error } = await supabaseClient
-                .from("shopping_items")
-                .update({ name: trimmedName })
-                .eq("id", itemId)
-                .eq("list_id", currentListId)
-                .select()
-                .single();
-
-            if (error) {
-                setStatus(`Bearbeiten fehlgeschlagen: ${error.message}`, "error");
-                return;
-            }
-
-            upsertItem(data);
-            renderItems();
-        }
-
-        if (action === "delete") {
-            const confirmed = window.confirm(
-                `Möchtest du "${item.name}" wirklich löschen?`
-            );
-
-            if (!confirmed) {
-                return;
-            }
-
-            const { error } = await supabaseClient
-                .from("shopping_items")
-                .delete()
-                .eq("id", itemId)
-                .eq("list_id", currentListId);
-
-            if (error) {
-                setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
-                return;
-            }
-
-            removeItem(itemId);
-            renderItems();
-        }
+    openEditModal(item);
+    return;
+}
     });
 
     filterButtons.forEach((button) => {
@@ -469,6 +440,93 @@ function setupEventHandlers() {
             await fetchItems();
         }
     });
+}
+function refreshEditCategoryOptions(selectedCategory = "") {
+    const categories = getAvailableCategories();
+
+    editItemCategoryInput.innerHTML = "";
+
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "— Bitte wählen —";
+    editItemCategoryInput.appendChild(emptyOption);
+
+    categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        editItemCategoryInput.appendChild(option);
+    });
+
+    editItemCategoryInput.value = categories.includes(selectedCategory)
+        ? selectedCategory
+        : "";
+}
+
+function openEditModal(item) {
+    editingItemId = item.id;
+
+    editItemNameInput.value = item.name;
+    refreshEditCategoryOptions(item.category);
+
+    editModal.hidden = false;
+    document.body.classList.add("modal-open");
+
+    window.setTimeout(() => {
+        editItemNameInput.focus();
+        editItemNameInput.select();
+    }, 0);
+}
+
+function closeEditModal() {
+    editModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    editingItemId = null;
+}
+
+async function saveEditedItem(event) {
+    event.preventDefault();
+
+    if (!supabaseClient || !editingItemId) {
+        return;
+    }
+
+    const item = items.find(
+        (currentItem) => currentItem.id === editingItemId
+    );
+
+    if (!item) {
+        closeEditModal();
+        return;
+    }
+
+    const trimmedName = editItemNameInput.value.trim();
+    const selectedCategory = editItemCategoryInput.value.trim();
+
+    if (trimmedName === "") {
+        editItemNameInput.focus();
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from("shopping_items")
+        .update({
+            name: trimmedName,
+            category: selectedCategory
+        })
+        .eq("id", editingItemId)
+        .eq("list_id", currentListId)
+        .select()
+        .single();
+
+    if (error) {
+        setStatus(`Bearbeiten fehlgeschlagen: ${error.message}`, "error");
+        return;
+    }
+
+    upsertItem(data);
+    renderItems();
+    closeEditModal();
 }
 
 async function initializeApp() {
