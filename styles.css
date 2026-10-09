@@ -1328,3 +1328,119 @@ body.modal-open {
     align-items: stretch;
     justify-content: flex-end;
 }
+.share-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.share-actions #share-link {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.share-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 40px;
+    padding: 0 13px;
+    color: var(--primary);
+    font-size: 0.86rem;
+    font-weight: 700;
+    background: #eeedff;
+    border: 1px solid #d9d6ff;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.share-button:hover {
+    background: #e4e1ff;
+    transform: translateY(-1px);
+}
+
+.qr-modal {
+    width: min(100%, 430px);
+    text-align: center;
+}
+
+.qr-modal .edit-modal-header {
+    text-align: left;
+}
+
+.qr-code {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 230px;
+    margin: 8px auto 18px;
+    padding: 16px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+}
+
+.qr-code img,
+.qr-code canvas {
+    display: block;
+    width: 210px !important;
+    height: 210px !important;
+}
+
+.qr-hint {
+    margin-bottom: 14px;
+    color: var(--muted-text);
+    font-size: 0.86rem;
+}
+
+.qr-link-preview {
+    max-width: 100%;
+    margin-bottom: 20px;
+    padding: 10px 12px;
+    overflow: hidden;
+    color: var(--muted-text);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #fafbfe;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.qr-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.qr-modal-actions .primary-button,
+.qr-modal-actions .secondary-button {
+    height: 44px;
+}
+
+@media (max-width: 600px) {
+    .share-actions {
+        justify-content: stretch;
+    }
+
+    .share-button {
+        flex: 1;
+    }
+
+    .qr-modal-actions {
+        flex-direction: column;
+    }
+
+    .qr-modal-actions button {
+        width: 100%;
+    }
+}
