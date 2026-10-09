@@ -29,10 +29,21 @@ const UUID_V4_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const currentListId = resolveListId();
-let isRefreshing = false;
+const POLLING_INTERVAL_MS = 30_000;
 
-window.setInterval(async () => {
-    if (!supabaseClient || !navigator.onLine || isRefreshing) {
+let isRefreshing = false;
+let pollingTimerId = null;
+
+function canSynchronizeInBackground() {
+    return (
+        supabaseClient &&
+        navigator.onLine &&
+        document.visibilityState === "visible"
+    );
+}
+
+async function refreshShoppingList() {
+    if (!canSynchronizeInBackground() || isRefreshing) {
         return;
     }
 
@@ -40,10 +51,34 @@ window.setInterval(async () => {
 
     try {
         await fetchItems();
+    } catch (error) {
+        console.error("Automatische Synchronisierung fehlgeschlagen:", error);
     } finally {
         isRefreshing = false;
     }
-}, 2000);
+}
+
+function startPollingFallback() {
+    if (pollingTimerId !== null) {
+        window.clearInterval(pollingTimerId);
+    }
+
+    pollingTimerId = window.setInterval(() => {
+        void refreshShoppingList();
+    }, POLLING_INTERVAL_MS);
+}
+
+startPollingFallback();
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        void refreshShoppingList();
+    }
+});
+
+window.addEventListener("online", () => {
+    void refreshShoppingList();
+});
 
 initializeShareUi();
 setupEventHandlers();
