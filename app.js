@@ -1,8 +1,28 @@
-const CONFIG = {
-    SUPABASE_URL: "https://wzbzxibuwvxivisoubsw.supabase.co",
-    SUPABASE_ANON_KEY: "sb_publishable_EqBA_Ze1P8dNg5VQ309OSQ_cblNukt6"
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-app.js";
+import { getFirestore, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, enableIndexedDbPersistence, serverTimestamp } 
+from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
+
+// 🔴 HIER DEINE FIREBASE-DATEN EINTRAGEN 🔴
+const firebaseConfig = {
+  apiKey: "AIzaSyD4_6P8J_4H3EP1phrWIca8tMHl0rhox-0",
+  authDomain: "einkaufliste-app.firebaseapp.com",
+  projectId: "einkaufliste-app",
+  storageBucket: "einkaufliste-app.firebasestorage.app",
+  messagingSenderId: "863186045446",
+  appId: "1:863186045446:web:b2b242b79c0b2ed5519187",
+  measurementId: "G-MZ6FVT4B0W"
 };
 
+// Firebase initialisieren
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Offline-Modus aktivieren
+enableIndexedDbPersistence(db).catch((err) => {
+    console.log("Offline-Modus Fehler: ", err.code);
+});
+
+// UI Elemente
 const itemForm = document.getElementById("item-form");
 const itemNameInput = document.getElementById("item-name");
 const itemCategoryInput = document.getElementById("item-category");
@@ -15,26 +35,17 @@ const categoryFilter = document.getElementById("category-filter");
 const editModal = document.getElementById("edit-modal");
 const editForm = document.getElementById("edit-form");
 const editItemNameInput = document.getElementById("edit-item-name");
-const editItemCategoryInput =
-    document.getElementById("edit-item-category");
-const closeEditModalButton =
-    document.getElementById("close-edit-modal");
+const editItemCategoryInput = document.getElementById("edit-item-category");
+const closeEditModalButton = document.getElementById("close-edit-modal");
 const cancelEditButton = document.getElementById("cancel-edit");
-const manageCategoriesButton =
-    document.getElementById("manage-categories");
+const manageCategoriesButton = document.getElementById("manage-categories");
 const categoryModal = document.getElementById("category-modal");
-const closeCategoryModalButton =
-    document.getElementById("close-category-modal");
-const categorySearchInput =
-    document.getElementById("category-search");
-const categorySortInput =
-    document.getElementById("category-sort");
-const managerCategoryInput =
-    document.getElementById("manager-category-input");
-const managerAddCategoryButton =
-    document.getElementById("manager-add-category");
-const categoryManagerList =
-    document.getElementById("category-manager-list");
+const closeCategoryModalButton = document.getElementById("close-category-modal");
+const categorySearchInput = document.getElementById("category-search");
+const categorySortInput = document.getElementById("category-sort");
+const managerCategoryInput = document.getElementById("manager-category-input");
+const managerAddCategoryButton = document.getElementById("manager-add-category");
+const categoryManagerList = document.getElementById("category-manager-list");
 const undoToast = document.getElementById("undo-toast");
 const undoMessage = document.getElementById("undo-message");
 const undoDeleteButton = document.getElementById("undo-delete");
@@ -44,20 +55,13 @@ const shareLinkInput = document.getElementById("share-link");
 const copyLinkButton = document.getElementById("copy-link");
 const showQrCodeButton = document.getElementById("show-qr-code");
 const qrModal = document.getElementById("qr-modal");
-const closeQrModalButton =
-    document.getElementById("close-qr-modal");
-const cancelQrModalButton =
-    document.getElementById("cancel-qr-modal");
-const qrCopyLinkButton =
-    document.getElementById("qr-copy-link");
-const qrCodeContainer =
-    document.getElementById("qr-code");
-const qrLinkPreview =
-    document.getElementById("qr-link-preview");
+const closeQrModalButton = document.getElementById("close-qr-modal");
+const cancelQrModalButton = document.getElementById("cancel-qr-modal");
+const qrCopyLinkButton = document.getElementById("qr-copy-link");
+const qrCodeContainer = document.getElementById("qr-code");
+const qrLinkPreview = document.getElementById("qr-link-preview");
 const listIdDisplay = document.getElementById("list-id-display");
 
-let supabaseClient = null;
-let realtimeChannel = null;
 let items = [];
 let currentStatusFilter = "all";
 let currentCategoryFilter = "all";
@@ -67,11 +71,9 @@ let deletedItemForUndo = null;
 let undoTimerId = null;
 
 const LIST_ID_PARAM = "list";
-const UUID_V4_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const currentListId = resolveListId();
-const POLLING_INTERVAL_MS = 30_000;
 const DEFAULT_CATEGORIES = [
     "Lebensmittel",
     "Getränke",
@@ -80,200 +82,15 @@ const DEFAULT_CATEGORIES = [
     "Sonstiges"
 ];
 
-const CUSTOM_CATEGORIES_STORAGE_KEY =
-    `shopping-list-custom-categories-${currentListId}`;
-
+const CUSTOM_CATEGORIES_STORAGE_KEY = `shopping-list-custom-categories-${currentListId}`;
 let customCategories = loadCustomCategories();
 
-let isRefreshing = false;
-let pollingTimerId = null;
-
-function canSynchronizeInBackground() {
-    return (
-        supabaseClient &&
-        navigator.onLine &&
-        document.visibilityState === "visible"
-    );
-}
-
-async function refreshShoppingList() {
-    if (!canSynchronizeInBackground() || isRefreshing) {
-        return;
-    }
-
-    isRefreshing = true;
-
-    try {
-        await fetchItems();
-    } catch (error) {
-        console.error("Automatische Synchronisierung fehlgeschlagen:", error);
-    } finally {
-        isRefreshing = false;
-    }
-}
-
-function startPollingFallback() {
-    if (pollingTimerId !== null) {
-        window.clearInterval(pollingTimerId);
-    }
-
-    pollingTimerId = window.setInterval(() => {
-        void refreshShoppingList();
-    }, POLLING_INTERVAL_MS);
-}
-
-startPollingFallback();
-
-document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
-        return;
-    }
-
-    if (!qrModal.hidden) {
-        closeQrModal();
-        return;
-    }
-
-    if (!categoryModal.hidden) {
-        closeCategoryModal();
-        return;
-    }
-
-    if (!editModal.hidden) {
-        closeEditModal();
-    }
-});
-
-window.addEventListener("online", () => {
-    void refreshShoppingList();
-});
-
+// Start
 initializeShareUi();
-
 setupEventHandlers();
 initializeApp();
 
-function loadCustomCategories() {
-    try {
-        const savedCategories = window.localStorage.getItem(
-            CUSTOM_CATEGORIES_STORAGE_KEY
-        );
-
-        if (!savedCategories) {
-            return [];
-        }
-
-        const parsedCategories = JSON.parse(savedCategories);
-
-        if (!Array.isArray(parsedCategories)) {
-            return [];
-        }
-
-        return parsedCategories
-            .map((category) => String(category).trim())
-            .filter(Boolean);
-    } catch (error) {
-        console.warn("Eigene Kategorien konnten nicht geladen werden:", error);
-        return [];
-    }
-}
-
-function saveCustomCategories() {
-    window.localStorage.setItem(
-        CUSTOM_CATEGORIES_STORAGE_KEY,
-        JSON.stringify(customCategories)
-    );
-}
-
-function getAvailableCategories() {
-    const categories = new Set(DEFAULT_CATEGORIES);
-
-    customCategories.forEach((category) => {
-        if (category.trim() !== "") {
-            categories.add(category.trim());
-        }
-    });
-
-    items.forEach((item) => {
-        if (item.category && item.category.trim() !== "") {
-            categories.add(item.category.trim());
-        }
-    });
-
-    const categoryList = Array.from(categories);
-
-    if (categorySortMode === "usage") {
-        return categoryList.sort((firstCategory, secondCategory) => {
-            const firstUsage = getCategoryUsageCount(firstCategory);
-            const secondUsage = getCategoryUsageCount(secondCategory);
-
-            if (secondUsage !== firstUsage) {
-                return secondUsage - firstUsage;
-            }
-
-            return firstCategory.localeCompare(secondCategory, "de");
-        });
-    }
-
-    return categoryList.sort((firstCategory, secondCategory) =>
-        firstCategory.localeCompare(secondCategory, "de")
-    );
-}
-
-function getCategoryUsageCount(category) {
-    return items.filter((item) => item.category === category).length;
-}
-
-function refreshCategoryOptions() {
-    const selectedItemCategory = itemCategoryInput.value;
-    const selectedFilterCategory = categoryFilter.value;
-
-    const categories = getAvailableCategories();
-
-    itemCategoryInput.innerHTML = "";
-
-    const emptyCategoryOption = document.createElement("option");
-    emptyCategoryOption.value = "";
-    emptyCategoryOption.textContent = "— Bitte wählen —";
-    itemCategoryInput.appendChild(emptyCategoryOption);
-
-    categories.forEach((category) => {
-        const option = document.createElement("option");
-        option.value = category;
-        option.textContent = category;
-        itemCategoryInput.appendChild(option);
-    });
-
-    if (categories.includes(selectedItemCategory)) {
-        itemCategoryInput.value = selectedItemCategory;
-    } else {
-        itemCategoryInput.value = "";
-    }
-
-    categoryFilter.innerHTML = "";
-
-    const allCategoriesOption = document.createElement("option");
-    allCategoriesOption.value = "all";
-    allCategoriesOption.textContent = "Alle Kategorien";
-    categoryFilter.appendChild(allCategoriesOption);
-
-    categories.forEach((category) => {
-        const option = document.createElement("option");
-        option.value = category;
-        option.textContent = category;
-        categoryFilter.appendChild(option);
-    });
-
-    if (
-        selectedFilterCategory === "all" ||
-        categories.includes(selectedFilterCategory)
-    ) {
-        categoryFilter.value = selectedFilterCategory;
-    } else {
-        categoryFilter.value = "all";
-        currentCategoryFilter = "all";
-    }
-}
+// --- Hilfsfunktionen für die Liste ---
 
 function resolveListId() {
     const url = new URL(window.location.href);
@@ -293,7 +110,6 @@ function generateListId() {
     if (window.crypto && typeof window.crypto.randomUUID === "function") {
         return window.crypto.randomUUID();
     }
-
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
         const random = Math.floor(Math.random() * 16);
         const value = char === "x" ? random : (random & 0x3) | 0x8;
@@ -305,19 +121,344 @@ function isValidUuid(value) {
     return UUID_V4_REGEX.test(value);
 }
 
+// --- Kategorien ---
+
+function loadCustomCategories() {
+    try {
+        const savedCategories = window.localStorage.getItem(CUSTOM_CATEGORIES_STORAGE_KEY);
+        if (!savedCategories) return [];
+        const parsedCategories = JSON.parse(savedCategories);
+        if (!Array.isArray(parsedCategories)) return [];
+        return parsedCategories.map((category) => String(category).trim()).filter(Boolean);
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveCustomCategories() {
+    window.localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(customCategories));
+}
+
+function getAvailableCategories() {
+    const categories = new Set(DEFAULT_CATEGORIES);
+    customCategories.forEach((category) => {
+        if (category.trim() !== "") categories.add(category.trim());
+    });
+    items.forEach((item) => {
+        if (item.category && item.category.trim() !== "") categories.add(item.category.trim());
+    });
+    const categoryList = Array.from(categories);
+
+    if (categorySortMode === "usage") {
+        return categoryList.sort((a, b) => {
+            const usageA = getCategoryUsageCount(a);
+            const usageB = getCategoryUsageCount(b);
+            if (usageB !== usageA) return usageB - usageA;
+            return a.localeCompare(b, "de");
+        });
+    }
+    return categoryList.sort((a, b) => a.localeCompare(b, "de"));
+}
+
+function getCategoryUsageCount(category) {
+    return items.filter((item) => item.category === category).length;
+}
+
+function refreshCategoryOptions() {
+    const selectedItemCategory = itemCategoryInput.value;
+    const selectedFilterCategory = categoryFilter.value;
+    const categories = getAvailableCategories();
+
+    itemCategoryInput.innerHTML = '<option value="">— Bitte wählen —</option>';
+    categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        itemCategoryInput.appendChild(option);
+    });
+    itemCategoryInput.value = categories.includes(selectedItemCategory) ? selectedItemCategory : "";
+
+    categoryFilter.innerHTML = '<option value="all">Alle Kategorien</option>';
+    categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        categoryFilter.appendChild(option);
+    });
+    categoryFilter.value = (selectedFilterCategory === "all" || categories.includes(selectedFilterCategory)) ? selectedFilterCategory : "all";
+}
+
+// --- Firebase Live-Synchronisation ---
+
+function initializeApp() {
+    setStatus("Verbindung wird aufgebaut...", "loading");
+
+    // Firebase Firestore Listener (Ersetzt fetchItems und subscribeToRealtime von Supabase)
+    const itemsQuery = query(collection(db, "shopping_items"), where("list_id", "==", currentListId));
+    
+    onSnapshot(itemsQuery, (snapshot) => {
+        const newItems = [];
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            newItems.push({
+                id: doc.id, // Firestore ID
+                list_id: data.list_id,
+                name: data.name,
+                category: data.category || "",
+                completed: data.completed || false,
+                created_at: data.created_at
+            });
+        });
+
+        // Sortieren (neueste zuerst)
+        items = newItems.sort((a, b) => {
+            const timeA = a.created_at?.toMillis ? a.created_at.toMillis() : 0;
+            const timeB = b.created_at?.toMillis ? b.created_at.toMillis() : 0;
+            return timeB - timeA;
+        });
+
+        renderItems();
+        setStatus("Verbunden und live synchronisiert.", "connected");
+    }, (error) => {
+        setStatus(`Live-Sync Fehler: ${error.message}`, "error");
+    });
+}
+
+// --- Event Handlers & Aktionen ---
+
+function setupEventHandlers() {
+    // Formular: Artikel hinzufügen
+    itemForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const name = itemNameInput.value.trim();
+        const category = itemCategoryInput.value;
+        if (name === "") return;
+
+        try {
+            await addDoc(collection(db, "shopping_items"), {
+                list_id: currentListId,
+                name: name,
+                category: category,
+                completed: false,
+                created_at: serverTimestamp()
+            });
+            itemForm.reset();
+            itemNameInput.focus();
+        } catch (error) {
+            setStatus(`Speichern fehlgeschlagen: ${error.message}`, "error");
+        }
+    });
+
+    // Liste Klicks (Abhaken, Löschen, Bearbeiten)
+    shoppingList.addEventListener("click", async (event) => {
+        const clickedButton = event.target.closest("button");
+        if (!clickedButton) return;
+
+        const action = clickedButton.dataset.action;
+        const itemId = clickedButton.dataset.id;
+        const item = items.find((currentItem) => currentItem.id === itemId);
+        if (!item) return;
+
+        if (action === "toggle") {
+            const itemRef = doc(db, "shopping_items", itemId);
+            await updateDoc(itemRef, { completed: !item.completed });
+        }
+        if (action === "edit") openEditModal(item);
+        if (action === "delete") deleteItemImmediately(item);
+    });
+
+    // Erledigte löschen
+    clearCompletedButton.addEventListener("click", async () => {
+        const completedItems = items.filter((item) => item.completed);
+        if (completedItems.length === 0) return window.alert("Es gibt keine erledigten Artikel.");
+        if (!window.confirm("Möchtest du alle erledigten Artikel löschen?")) return;
+
+        completedItems.forEach(async (item) => {
+            await deleteDoc(doc(db, "shopping_items", item.id));
+        });
+    });
+
+    // Filter
+    filterButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            filterButtons.forEach((btn) => btn.classList.remove("active"));
+            button.classList.add("active");
+            currentStatusFilter = button.dataset.filter;
+            renderItems();
+        });
+    });
+    categoryFilter.addEventListener("change", () => {
+        currentCategoryFilter = categoryFilter.value;
+        renderItems();
+    });
+
+    // Modal Events
+    closeEditModalButton.addEventListener("click", closeEditModal);
+    cancelEditButton.addEventListener("click", closeEditModal);
+    editForm.addEventListener("submit", saveEditedItem);
+    manageCategoriesButton.addEventListener("click", openCategoryModal);
+    closeCategoryModalButton.addEventListener("click", closeCategoryModal);
+    undoDeleteButton.addEventListener("click", undoLastDelete);
+    
+    // Teilen Events
+    copyLinkButton.addEventListener("click", copyShareLink);
+    showQrCodeButton.addEventListener("click", openQrModal);
+    closeQrModalButton.addEventListener("click", closeQrModal);
+    cancelQrModalButton.addEventListener("click", closeQrModal);
+    qrCopyLinkButton.addEventListener("click", copyShareLink);
+}
+
+// --- UI Rendering ---
+
+function renderItems() {
+    refreshCategoryOptions();
+    const visibleItems = items.filter((item) => {
+        const matchesStatus = currentStatusFilter === "all" || (currentStatusFilter === "open" && !item.completed) || (currentStatusFilter === "done" && item.completed);
+        const matchesCategory = currentCategoryFilter === "all" || item.category === currentCategoryFilter;
+        return matchesStatus && matchesCategory;
+    });
+
+    shoppingList.innerHTML = "";
+    emptyState.style.display = visibleItems.length === 0 ? "block" : "none";
+
+    visibleItems.forEach((item) => {
+        const listItem = document.createElement("li");
+        listItem.className = `shopping-item ${item.completed ? "completed" : ""}`;
+
+        const checkboxButton = document.createElement("button");
+        checkboxButton.className = `checkbox ${item.completed ? "checked" : ""}`;
+        checkboxButton.dataset.action = "toggle";
+        checkboxButton.dataset.id = item.id;
+        
+        const content = document.createElement("div");
+        content.className = "item-content";
+        content.innerHTML = `<p class="item-name">${item.name}</p>`;
+        if (item.category) content.innerHTML += `<span class="item-category">${item.category}</span>`;
+
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+        actions.innerHTML = `
+            <button class="icon-button" data-action="edit" data-id="${item.id}">✏️</button>
+            <button class="icon-button delete" data-action="delete" data-id="${item.id}">🗑️</button>
+        `;
+
+        listItem.append(checkboxButton, content, actions);
+        shoppingList.appendChild(listItem);
+    });
+
+    const openItems = items.filter((i) => !i.completed).length;
+    itemCount.textContent = items.length === 1 ? "1 Artikel" : `${items.length} Artikel`;
+    remainingCount.textContent = openItems === 1 ? "1 offener Artikel" : `${openItems} offene Artikel`;
+}
+
+function setStatus(message, mode) {
+    connectionStatus.textContent = message;
+    connectionStatus.className = `status-badge ${mode}`;
+}
+
+// --- Aktionen (Löschen, Bearbeiten, Undo) ---
+
+async function deleteItemImmediately(item) {
+    try {
+        await deleteDoc(doc(db, "shopping_items", item.id));
+        deletedItemForUndo = { ...item };
+        showUndoToast(item.name);
+    } catch (error) {
+        setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
+    }
+}
+
+function showUndoToast(itemName) {
+    if (undoTimerId) window.clearTimeout(undoTimerId);
+    undoMessage.textContent = `"${itemName}" wurde gelöscht.`;
+    undoToast.hidden = false;
+    undoTimerId = window.setTimeout(() => {
+        deletedItemForUndo = null;
+        undoToast.hidden = true;
+    }, 8000);
+}
+
+async function undoLastDelete() {
+    if (!deletedItemForUndo) return;
+    try {
+        // Stellt das Dokument mit der exakt gleichen ID wieder her
+        await setDoc(doc(db, "shopping_items", deletedItemForUndo.id), {
+            list_id: deletedItemForUndo.list_id,
+            name: deletedItemForUndo.name,
+            category: deletedItemForUndo.category,
+            completed: deletedItemForUndo.completed,
+            created_at: deletedItemForUndo.created_at || serverTimestamp()
+        });
+        undoToast.hidden = true;
+        deletedItemForUndo = null;
+    } catch (error) {
+        setStatus(`Wiederherstellen fehlgeschlagen: ${error.message}`, "error");
+    }
+}
+
+function openEditModal(item) {
+    editingItemId = item.id;
+    editItemNameInput.value = item.name;
+    
+    // Kategorie Optionen laden
+    editItemCategoryInput.innerHTML = '<option value="">— Bitte wählen —</option>';
+    getAvailableCategories().forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        editItemCategoryInput.appendChild(option);
+    });
+    editItemCategoryInput.value = item.category || "";
+
+    editModal.hidden = false;
+}
+
+function closeEditModal() {
+    editModal.hidden = true;
+    editingItemId = null;
+}
+
+async function saveEditedItem(event) {
+    event.preventDefault();
+    if (!editingItemId) return;
+    const trimmedName = editItemNameInput.value.trim();
+    const selectedCategory = editItemCategoryInput.value.trim();
+    if (trimmedName === "") return;
+
+    try {
+        await updateDoc(doc(db, "shopping_items", editingItemId), {
+            name: trimmedName,
+            category: selectedCategory
+        });
+        closeEditModal();
+    } catch (error) {
+        setStatus(`Bearbeiten fehlgeschlagen: ${error.message}`, "error");
+    }
+}
+
+// --- Teilen & QR Code (Unverändert) ---
+
 function initializeShareUi() {
     shareLinkInput.value = window.location.href;
     listIdDisplay.textContent = `Listen-ID: ${currentListId}`;
 }
-function openQrModal() {
-    if (typeof QRCode === "undefined") {
-        setStatus("QR-Code-Bibliothek konnte nicht geladen werden.", "error");
-        return;
-    }
 
+async function copyShareLink() {
+    try {
+        await navigator.clipboard.writeText(shareLinkInput.value);
+        copyLinkButton.textContent = "Kopiert!";
+        window.setTimeout(() => {
+            copyLinkButton.innerHTML = '<span aria-hidden="true">🔗</span> Link kopieren';
+        }, 1500);
+    } catch (error) {
+        setStatus("Link konnte nicht kopiert werden.", "error");
+    }
+}
+
+function openQrModal() {
+    if (typeof QRCode === "undefined") return;
     qrCodeContainer.innerHTML = "";
     qrLinkPreview.textContent = shareLinkInput.value;
-
     new QRCode(qrCodeContainer, {
         text: shareLinkInput.value,
         width: 210,
@@ -326,913 +467,13 @@ function openQrModal() {
         colorLight: "#ffffff",
         correctLevel: QRCode.CorrectLevel.M
     });
-
     qrModal.hidden = false;
-    document.body.classList.add("modal-open");
 }
 
 function closeQrModal() {
     qrModal.hidden = true;
-
-    if (
-        editModal.hidden &&
-        categoryModal.hidden
-    ) {
-        document.body.classList.remove("modal-open");
-    }
 }
 
-async function copyShareLink() {
-    try {
-        await navigator.clipboard.writeText(shareLinkInput.value);
-
-        copyLinkButton.textContent = "Kopiert!";
-
-        window.setTimeout(() => {
-            copyLinkButton.innerHTML =
-                '<span aria-hidden="true">🔗</span> Link kopieren';
-        }, 1500);
-    } catch (error) {
-        setStatus("Link konnte nicht kopiert werden.", "error");
-    }
-}
-function setupEventHandlers() {
-
-    closeEditModalButton.addEventListener("click", closeEditModal);
-    cancelEditButton.addEventListener("click", closeEditModal);
-
-    editModal.addEventListener("click", (event) => {
-        if (event.target === editModal) {
-            closeEditModal();
-        }
-    });
-
-    editForm.addEventListener("submit", saveEditedItem);
-        manageCategoriesButton.addEventListener(
-        "click",
-        openCategoryModal
-    );
-
-    closeCategoryModalButton.addEventListener(
-        "click",
-        closeCategoryModal
-    );
-
-    categoryModal.addEventListener("click", (event) => {
-        if (event.target === categoryModal) {
-            closeCategoryModal();
-        }
-    });
-
-    categorySearchInput.addEventListener("input", renderCategoryManager);
-
-    categorySortInput.addEventListener("change", () => {
-        categorySortMode = categorySortInput.value;
-        refreshCategoryOptions();
-        renderCategoryManager();
-    });
-
-    managerAddCategoryButton.addEventListener(
-        "click",
-        createCategoryFromManager
-    );
-
-    managerCategoryInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            createCategoryFromManager();
-        }
-
-    undoDeleteButton.addEventListener("click", undoLastDelete);
-
-    });
-
-        copyLinkButton.addEventListener("click", copyShareLink);
-
-    showQrCodeButton.addEventListener("click", openQrModal);
-
-    closeQrModalButton.addEventListener(
-        "click",
-        closeQrModal
-    );
-
-    cancelQrModalButton.addEventListener(
-        "click",
-        closeQrModal
-    );
-
-    qrCopyLinkButton.addEventListener("click", copyShareLink);
-
-    qrModal.addEventListener("click", (event) => {
-        if (event.target === qrModal) {
-            closeQrModal();
-        }
-    });
-
-    itemForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-
-        if (!supabaseClient) {
-            return;
-        }
-
-        const name = itemNameInput.value.trim();
-        const category = itemCategoryInput.value;
-
-        if (name === "") {
-            return;
-        }
-
-        const { data, error } = await supabaseClient
-            .from("shopping_items")
-            .insert({
-                list_id: currentListId,
-                name: name,
-                category: category,
-                completed: false
-            })
-            .select()
-            .single();
-
-        if (error) {
-            setStatus(`Speichern fehlgeschlagen: ${error.message}`, "error");
-            return;
-        }
-
-        upsertItem(data);
-        renderItems();
-
-        itemForm.reset();
-        itemNameInput.focus();
-    });
-
-    shoppingList.addEventListener("click", async (event) => {
-        if (!supabaseClient) {
-            return;
-        }
-
-        const clickedButton = event.target.closest("button");
-
-        if (!clickedButton) {
-            return;
-        }
-
-        const action = clickedButton.dataset.action;
-        const itemId = clickedButton.dataset.id;
-        const item = items.find((currentItem) => currentItem.id === itemId);
-
-        if (!item) {
-            return;
-        }
-
-        if (action === "toggle") {
-            const { data, error } = await supabaseClient
-                .from("shopping_items")
-                .update({ completed: !item.completed })
-                .eq("id", itemId)
-                .eq("list_id", currentListId)
-                .select()
-                .single();
-
-            if (error) {
-                setStatus(`Aktualisieren fehlgeschlagen: ${error.message}`, "error");
-                return;
-            }
-
-            upsertItem(data);
-            renderItems();
-        }
-
-        if (action === "edit") {
-    openEditModal(item);
-    return;
-}
-                if (action === "delete") {
-            await deleteItemImmediately(item);
-        }
-    });
-
-    filterButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            filterButtons.forEach((filterButton) => {
-                filterButton.classList.remove("active");
-            });
-
-            button.classList.add("active");
-            currentStatusFilter = button.dataset.filter;
-            renderItems();
-        });
-    });
-
-    categoryFilter.addEventListener("change", () => {
-        currentCategoryFilter = categoryFilter.value;
-        renderItems();
-    });
-
-    clearCompletedButton.addEventListener("click", async () => {
-        if (!supabaseClient) {
-            return;
-        }
-
-        const completedItems = items.filter((item) => item.completed);
-
-        if (completedItems.length === 0) {
-            window.alert("Es gibt keine erledigten Artikel.");
-            return;
-        }
-
-        const confirmed = window.confirm(
-            "Möchtest du alle erledigten Artikel löschen?"
-        );
-
-        if (!confirmed) {
-            return;
-        }
-
-        const { error } = await supabaseClient
-            .from("shopping_items")
-            .delete()
-            .eq("list_id", currentListId)
-            .eq("completed", true);
-
-        if (error) {
-            setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
-            return;
-        }
-
-        items = items.filter((item) => !item.completed);
-        renderItems();
-    });
-
-    window.addEventListener("offline", () => {
-        setStatus("Offline: Verbindung unterbrochen.", "error");
-    });
-
-    window.addEventListener("online", async () => {
-        setStatus("Verbindung wird wiederhergestellt...", "loading");
-
-        if (supabaseClient) {
-            await fetchItems();
-        }
-    });
-}
-async function deleteItemImmediately(item) {
-    const { error } = await supabaseClient
-        .from("shopping_items")
-        .delete()
-        .eq("id", item.id)
-        .eq("list_id", currentListId);
-
-    if (error) {
-        setStatus(`Löschen fehlgeschlagen: ${error.message}`, "error");
-        return;
-    }
-
-    deletedItemForUndo = {
-        id: item.id,
-        list_id: item.list_id,
-        name: item.name,
-        category: item.category,
-        completed: item.completed
-    };
-
-    removeItem(item.id);
-    renderItems();
-    showUndoToast(item.name);
-}
-
-function showUndoToast(itemName) {
-    if (undoTimerId !== null) {
-        window.clearTimeout(undoTimerId);
-    }
-
-    undoMessage.textContent = `"${itemName}" wurde gelöscht.`;
-    undoToast.hidden = false;
-
-    undoTimerId = window.setTimeout(() => {
-        deletedItemForUndo = null;
-        undoToast.hidden = true;
-        undoTimerId = null;
-    }, 8000);
-}
-
-async function undoLastDelete() {
-    if (!deletedItemForUndo || !supabaseClient) {
-        return;
-    }
-
-    const itemToRestore = deletedItemForUndo;
-
-    const { data, error } = await supabaseClient
-        .from("shopping_items")
-        .insert({
-            id: itemToRestore.id,
-            list_id: itemToRestore.list_id,
-            name: itemToRestore.name,
-            category: itemToRestore.category,
-            completed: itemToRestore.completed
-        })
-        .select()
-        .single();
-
-    if (error) {
-        setStatus(`Wiederherstellen fehlgeschlagen: ${error.message}`, "error");
-        return;
-    }
-
-    upsertItem(data);
-    renderItems();
-
-    deletedItemForUndo = null;
-    undoToast.hidden = true;
-
-    if (undoTimerId !== null) {
-        window.clearTimeout(undoTimerId);
-        undoTimerId = null;
-    }
-}
-
-function openCategoryModal() {
-    closeEditModal();
-
-    categoryModal.hidden = false;
-    document.body.classList.add("modal-open");
-    categorySearchInput.value = "";
-    renderCategoryManager();
-
-    window.setTimeout(() => {
-        categorySearchInput.focus();
-    }, 0);
-}
-
-function closeCategoryModal() {
-    categoryModal.hidden = true;
-
-    if (editModal.hidden) {
-        document.body.classList.remove("modal-open");
-    }
-}
-
-
-function createCategoryFromManager() {
-    const newCategory = managerCategoryInput.value.trim();
-
-    if (newCategory === "") {
-        return;
-    }
-
-    const exists = getAvailableCategories().some(
-        (category) =>
-            category.toLowerCase() === newCategory.toLowerCase()
-    );
-
-    if (!exists) {
-        customCategories.push(newCategory);
-        saveCustomCategories();
-    }
-
-    managerCategoryInput.value = "";
-    refreshCategoryOptions();
-    renderCategoryManager();
-}
-
-function renderCategoryManager() {
-    const searchTerm = categorySearchInput.value.trim().toLowerCase();
-    const categories = getAvailableCategories().filter((category) =>
-        category.toLowerCase().includes(searchTerm)
-    );
-
-    categoryManagerList.innerHTML = "";
-
-    if (categories.length === 0) {
-        const emptyMessage = document.createElement("div");
-        emptyMessage.className = "category-manager-empty";
-        emptyMessage.textContent = "Keine Kategorien gefunden.";
-        categoryManagerList.appendChild(emptyMessage);
-        return;
-    }
-
-    categories.forEach((category) => {
-        const row = document.createElement("div");
-        row.className = "category-manager-item";
-
-        const info = document.createElement("div");
-        info.className = "category-manager-item-info";
-
-        const name = document.createElement("p");
-        name.className = "category-manager-item-name";
-        name.textContent = category;
-
-        const count = document.createElement("p");
-        count.className = "category-manager-item-count";
-        const usageCount = getCategoryUsageCount(category);
-        count.textContent =
-            usageCount === 1
-                ? "1 Artikel"
-                : `${usageCount} Artikel`;
-
-        info.appendChild(name);
-        info.appendChild(count);
-
-        const actions = document.createElement("div");
-        actions.className = "category-manager-actions";
-
-        const isDefaultCategory = DEFAULT_CATEGORIES.includes(category);
-
-        const editButton = document.createElement("button");
-        editButton.type = "button";
-        editButton.textContent = "✏️";
-        editButton.title = "Kategorie umbenennen";
-        editButton.addEventListener("click", () => {
-            renameCategory(category);
-        });
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "category-delete";
-        deleteButton.textContent = "🗑️";
-        deleteButton.title = isDefaultCategory
-            ? "Standardkategorien können nicht gelöscht werden"
-            : "Kategorie löschen";
-        deleteButton.disabled = isDefaultCategory;
-
-        if (!isDefaultCategory) {
-            deleteButton.addEventListener("click", () => {
-                deleteCategory(category);
-            });
-        }
-
-        actions.appendChild(editButton);
-        actions.appendChild(deleteButton);
-
-        row.appendChild(info);
-        row.appendChild(actions);
-        categoryManagerList.appendChild(row);
-    });
-}
-
-async function renameCategory(oldCategory) {
-    const newCategory = window.prompt(
-        `Neuer Name für "${oldCategory}":`,
-        oldCategory
-    );
-
-    if (newCategory === null) {
-        return;
-    }
-
-    const trimmedCategory = newCategory.trim();
-
-    if (
-        trimmedCategory === "" ||
-        trimmedCategory.toLowerCase() === oldCategory.toLowerCase()
-    ) {
-        return;
-    }
-
-    const alreadyExists = getAvailableCategories().some(
-        (category) =>
-            category.toLowerCase() === trimmedCategory.toLowerCase()
-    );
-
-    if (alreadyExists) {
-        setStatus("Diese Kategorie gibt es bereits.", "error");
-        return;
-    }
-
-    const { error } = await supabaseClient
-        .from("shopping_items")
-        .update({ category: trimmedCategory })
-        .eq("list_id", currentListId)
-        .eq("category", oldCategory);
-
-    if (error) {
-        setStatus(`Kategorie konnte nicht umbenannt werden: ${error.message}`, "error");
-        return;
-    }
-
-    const customIndex = customCategories.findIndex(
-        (category) => category === oldCategory
-    );
-
-    if (customIndex >= 0) {
-        customCategories[customIndex] = trimmedCategory;
-        saveCustomCategories();
-    }
-
-    items = items.map((item) =>
-        item.category === oldCategory
-            ? { ...item, category: trimmedCategory }
-            : item
-    );
-
-    refreshCategoryOptions();
-    renderItems();
-    renderCategoryManager();
-}
-
-async function deleteCategory(category) {
-    if (DEFAULT_CATEGORIES.includes(category)) {
-        return;
-    }
-
-    const { error } = await supabaseClient
-        .from("shopping_items")
-        .update({ category: "" })
-        .eq("list_id", currentListId)
-        .eq("category", category);
-
-    if (error) {
-        setStatus(`Kategorie konnte nicht gelöscht werden: ${error.message}`, "error");
-        return;
-    }
-
-    customCategories = customCategories.filter(
-        (currentCategory) => currentCategory !== category
-    );
-    saveCustomCategories();
-
-    items = items.map((item) =>
-        item.category === category
-            ? { ...item, category: "" }
-            : item
-    );
-
-    if (currentCategoryFilter === category) {
-        currentCategoryFilter = "all";
-    }
-
-    refreshCategoryOptions();
-    renderItems();
-    renderCategoryManager();
-}
-
-function refreshEditCategoryOptions(selectedCategory = "") {
-    const categories = getAvailableCategories();
-
-    editItemCategoryInput.innerHTML = "";
-
-    const emptyOption = document.createElement("option");
-    emptyOption.value = "";
-    emptyOption.textContent = "— Bitte wählen —";
-    editItemCategoryInput.appendChild(emptyOption);
-
-    categories.forEach((category) => {
-        const option = document.createElement("option");
-        option.value = category;
-        option.textContent = category;
-        editItemCategoryInput.appendChild(option);
-    });
-
-    editItemCategoryInput.value = categories.includes(selectedCategory)
-        ? selectedCategory
-        : "";
-}
-
-function openEditModal(item) {
-    closeCategoryModal();
-
-    editingItemId = item.id;
-
-    editItemNameInput.value = item.name;
-    refreshEditCategoryOptions(item.category);
-
-    editModal.hidden = false;
-    document.body.classList.add("modal-open");
-
-    window.setTimeout(() => {
-        editItemNameInput.focus();
-        editItemNameInput.select();
-    }, 0);
-}
-
-function closeEditModal() {
-    editModal.hidden = true;
-    editingItemId = null;
-
-    if (categoryModal.hidden) {
-        document.body.classList.remove("modal-open");
-    }
-}
-
-async function saveEditedItem(event) {
-    event.preventDefault();
-
-    if (!supabaseClient || !editingItemId) {
-        return;
-    }
-
-    const item = items.find(
-        (currentItem) => currentItem.id === editingItemId
-    );
-
-    if (!item) {
-        closeEditModal();
-        return;
-    }
-
-    const trimmedName = editItemNameInput.value.trim();
-    const selectedCategory = editItemCategoryInput.value.trim();
-
-    if (trimmedName === "") {
-        editItemNameInput.focus();
-        return;
-    }
-
-    const { data, error } = await supabaseClient
-        .from("shopping_items")
-        .update({
-            name: trimmedName,
-            category: selectedCategory
-        })
-        .eq("id", editingItemId)
-        .eq("list_id", currentListId)
-        .select()
-        .single();
-
-    if (error) {
-        setStatus(`Bearbeiten fehlgeschlagen: ${error.message}`, "error");
-        return;
-    }
-
-    upsertItem(data);
-    renderItems();
-    closeEditModal();
-}
-
-async function initializeApp() {
-    renderItems();
-    setStatus("Verbindung wird aufgebaut...", "loading");
-
-    if (!window.supabase || typeof window.supabase.createClient !== "function") {
-        setStatus(
-            "Supabase-Bibliothek nicht geladen. Bitte Seite neu laden.",
-            "error"
-        );
-        return;
-    }
-
-    if (!isConfigValid()) {
-        setStatus(
-            "Bitte SUPABASE_URL und SUPABASE_ANON_KEY oben in app.js eintragen.",
-            "error"
-        );
-        emptyState.querySelector("p").textContent =
-            "Konfiguration fehlt: Öffne app.js und trage deine Supabase-Daten ein.";
-        return;
-    }
-
-    supabaseClient = window.supabase.createClient(
-        CONFIG.SUPABASE_URL,
-        CONFIG.SUPABASE_ANON_KEY,
-        {
-            global: {
-                headers: {
-                    "x-list-id": currentListId
-                }
-            }
-        }
-    );
-
-    subscribeToRealtime();
-    await fetchItems();
-}
-
-function isConfigValid() {
-    const hasValues =
-        CONFIG.SUPABASE_URL &&
-        CONFIG.SUPABASE_ANON_KEY &&
-        CONFIG.SUPABASE_URL.trim() !== "" &&
-        CONFIG.SUPABASE_ANON_KEY.trim() !== "";
-
-    if (!hasValues) {
-        return false;
-    }
-
-    const containsPlaceholder =
-        CONFIG.SUPABASE_URL.includes("DEINE_SUPABASE_URL") ||
-        CONFIG.SUPABASE_ANON_KEY.includes("DEIN_SUPABASE_ANON_KEY");
-
-    return !containsPlaceholder;
-}
-
-function subscribeToRealtime() {
-    if (realtimeChannel) {
-        supabaseClient.removeChannel(realtimeChannel);
-    }
-
-    realtimeChannel = supabaseClient
-        .channel(`shopping_items:${currentListId}`)
-        .on(
-            "postgres_changes",
-            {
-                event: "INSERT",
-                schema: "public",
-                table: "shopping_items",
-                filter: `list_id=eq.${currentListId}`
-            },
-            (payload) => {
-                upsertItem(payload.new);
-                renderItems();
-            }
-        )
-        .on(
-            "postgres_changes",
-            {
-                event: "UPDATE",
-                schema: "public",
-                table: "shopping_items",
-                filter: `list_id=eq.${currentListId}`
-            },
-            (payload) => {
-                upsertItem(payload.new);
-                renderItems();
-            }
-        )
-        .on(
-            "postgres_changes",
-            {
-                event: "DELETE",
-                schema: "public",
-                table: "shopping_items",
-                filter: `list_id=eq.${currentListId}`
-            },
-            (payload) => {
-                removeItem(payload.old.id);
-                renderItems();
-            }
-        )
-        .subscribe((status) => {
-            if (status === "SUBSCRIBED") {
-                setStatus("Verbunden und live synchronisiert.", "connected");
-                return;
-            }
-
-            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-                setStatus("Live-Synchronisierung gestört. Bitte neu laden.", "error");
-                return;
-            }
-
-            if (status === "CLOSED") {
-                setStatus("Verbindung geschlossen.", "error");
-            }
-        });
-}
-
-async function fetchItems() {
-    if (!supabaseClient) {
-        return;
-    }
-
-    const { data, error } = await supabaseClient
-        .from("shopping_items")
-        .select("id, list_id, name, category, completed, created_at, updated_at")
-        .eq("list_id", currentListId)
-        .order("created_at", { ascending: false });
-
-    if (error) {
-        setStatus(`Laden fehlgeschlagen: ${error.message}`, "error");
-        return;
-    }
-
-    items = Array.isArray(data) ? data.map(normalizeItem) : [];
-    renderItems();
-    setStatus("Liste geladen.", "connected");
-}
-
-function normalizeItem(rawItem) {
-    return {
-        id: rawItem.id,
-        list_id: rawItem.list_id,
-        name: String(rawItem.name ?? ""),
-        category: String(rawItem.category ?? "").trim(),
-        completed: Boolean(rawItem.completed),
-        created_at: rawItem.created_at,
-        updated_at: rawItem.updated_at
-    };
-}
-
-function upsertItem(rawItem) {
-    const item = normalizeItem(rawItem);
-    const existingIndex = items.findIndex((entry) => entry.id === item.id);
-
-    if (existingIndex >= 0) {
-        items[existingIndex] = item;
-        return;
-    }
-
-    items.unshift(item);
-}
-
-function removeItem(itemId) {
-    items = items.filter((item) => item.id !== itemId);
-}
-
-function getVisibleItems() {
-    return items.filter((item) => {
-        const matchesStatus =
-            currentStatusFilter === "all" ||
-            (currentStatusFilter === "open" && !item.completed) ||
-            (currentStatusFilter === "done" && item.completed);
-
-        const matchesCategory =
-            currentCategoryFilter === "all" ||
-            item.category === currentCategoryFilter;
-
-        return matchesStatus && matchesCategory;
-    });
-}
-
-function renderItems() {
-    refreshCategoryOptions();
-
-    const visibleItems = getVisibleItems();
-    shoppingList.innerHTML = "";
-
-    if (visibleItems.length === 0) {
-        emptyState.style.display = "block";
-    } else {
-        emptyState.style.display = "none";
-    }
-
-    visibleItems.forEach((item) => {
-        const listItem = document.createElement("li");
-        listItem.className = "shopping-item";
-
-        if (item.completed) {
-            listItem.classList.add("completed");
-        }
-
-        const checkboxButton = document.createElement("button");
-        checkboxButton.className = "checkbox";
-        if (item.completed) {
-            checkboxButton.classList.add("checked");
-        }
-        checkboxButton.dataset.action = "toggle";
-        checkboxButton.dataset.id = item.id;
-        checkboxButton.setAttribute("aria-label", "Artikel erledigen");
-
-        const content = document.createElement("div");
-        content.className = "item-content";
-
-        const name = document.createElement("p");
-        name.className = "item-name";
-        name.textContent = item.name;
-
-        content.appendChild(name);
-
-        if (item.category) {
-            const category = document.createElement("span");
-            category.className = "item-category";
-            category.textContent = item.category;
-            content.appendChild(category);
-        }
-
-        const actions = document.createElement("div");
-        actions.className = "item-actions";
-
-        const editButton = document.createElement("button");
-        editButton.className = "icon-button";
-        editButton.dataset.action = "edit";
-        editButton.dataset.id = item.id;
-        editButton.setAttribute("title", "Artikel bearbeiten");
-        editButton.setAttribute("aria-label", "Artikel bearbeiten");
-        editButton.textContent = "✏️";
-
-        const deleteButton = document.createElement("button");
-        deleteButton.className = "icon-button delete";
-        deleteButton.dataset.action = "delete";
-        deleteButton.dataset.id = item.id;
-        deleteButton.setAttribute("title", "Artikel löschen");
-        deleteButton.setAttribute("aria-label", "Artikel löschen");
-        deleteButton.textContent = "🗑️";
-
-        actions.appendChild(editButton);
-        actions.appendChild(deleteButton);
-
-        listItem.appendChild(checkboxButton);
-        listItem.appendChild(content);
-        listItem.appendChild(actions);
-
-        shoppingList.appendChild(listItem);
-    });
-
-    updateCounters();
-}
-
-function updateCounters() {
-    const openItems = items.filter((item) => !item.completed).length;
-    const totalItems = items.length;
-
-    itemCount.textContent =
-        totalItems === 1 ? "1 Artikel" : `${totalItems} Artikel`;
-
-    remainingCount.textContent =
-        openItems === 1 ? "1 offener Artikel" : `${openItems} offene Artikel`;
-}
-
-function setStatus(message, mode) {
-    connectionStatus.textContent = message;
-    connectionStatus.classList.remove("loading", "connected", "error");
-    connectionStatus.classList.add(mode);
-}
+// --- Kategorien Manager (vereinfacht) ---
+function openCategoryModal() { categoryModal.hidden = false; }
+function closeCategoryModal() { categoryModal.hidden = true; }
