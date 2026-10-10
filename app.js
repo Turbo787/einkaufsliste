@@ -227,6 +227,7 @@ function startApp() {
 // --- Event Handlers & Aktionen ---
 
 function setupEventHandlers() {
+    managerAddCategoryButton.addEventListener("click", createCategoryFromManager);
     // Formular: Artikel hinzufügen
     itemForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -494,5 +495,128 @@ async function createCategoryFromManager() {
 
 
 // --- Kategorien Manager (vereinfacht) ---
-function openCategoryModal() { categoryModal.hidden = false; }
+// --- Kategorien Manager ---
+
+function openCategoryModal() {
+    closeEditModal();
+    categoryModal.hidden = false;
+    document.body.classList.add("modal-open");
+    categorySearchInput.value = "";
+    renderCategoryManager();
+
+    window.setTimeout(() => {
+        categorySearchInput.focus();
+    }, 0);
+}
+
+function closeCategoryModal() {
+    categoryModal.hidden = true;
+    if (editModal.hidden) {
+        document.body.classList.remove("modal-open");
+    }
+}
+
+function createCategoryFromManager() {
+    const newCategory = managerCategoryInput.value.trim();
+    if (newCategory === "") return;
+
+    const categories = getAvailableCategories();
+    const exists = categories.some(
+        (category) => category.toLowerCase() === newCategory.toLowerCase()
+    );
+
+    if (!exists) {
+        customCategories.push(newCategory);
+        saveCustomCategories();
+    }
+
+    managerCategoryInput.value = "";
+    refreshCategoryOptions();
+    renderCategoryManager();
+}
+
+function renderCategoryManager() {
+    const searchTerm = categorySearchInput.value.trim().toLowerCase();
+    const categories = getAvailableCategories().filter((category) =>
+        category.toLowerCase().includes(searchTerm)
+    );
+
+    categoryManagerList.innerHTML = "";
+
+    if (categories.length === 0) {
+        const emptyMessage = document.createElement("div");
+        emptyMessage.className = "category-manager-empty";
+        emptyMessage.textContent = "Keine Kategorien gefunden.";
+        categoryManagerList.appendChild(emptyMessage);
+        return;
+    }
+
+    categories.forEach((category) => {
+        const row = document.createElement("div");
+        row.className = "category-manager-item";
+
+        const info = document.createElement("div");
+        info.className = "category-manager-item-info";
+
+        const name = document.createElement("p");
+        name.className = "category-manager-item-name";
+        name.textContent = category;
+
+        const count = document.createElement("p");
+        count.className = "category-manager-item-count";
+        const usageCount = getCategoryUsageCount(category);
+        count.textContent = usageCount === 1 ? "1 Artikel" : `${usageCount} Artikel`;
+
+        info.appendChild(name);
+        info.appendChild(count);
+
+        const actions = document.createElement("div");
+        actions.className = "category-manager-actions";
+
+        const isDefaultCategory = DEFAULT_CATEGORIES.includes(category);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "category-delete";
+        deleteButton.textContent = "🗑️";
+        deleteButton.title = isDefaultCategory
+            ? "Standardkategorien können nicht gelöscht werden"
+            : "Kategorie löschen";
+        deleteButton.disabled = isDefaultCategory;
+
+        if (!isDefaultCategory) {
+            deleteButton.addEventListener("click", () => {
+                deleteCategoryFromManager(category);
+            });
+        }
+
+        actions.appendChild(deleteButton);
+        row.appendChild(info);
+        row.appendChild(actions);
+        categoryManagerList.appendChild(row);
+    });
+}
+
+function deleteCategoryFromManager(category) {
+    if (DEFAULT_CATEGORIES.includes(category)) return;
+
+    customCategories = customCategories.filter(
+        (currentCategory) => currentCategory !== category
+    );
+    saveCustomCategories();
+
+    // Setze bei Artikeln, die diese Kategorie hatten, den Wert zurück
+    items = items.map((item) =>
+        item.category === category ? { ...item, category: "" } : item
+    );
+
+    if (currentCategoryFilter === category) {
+        currentCategoryFilter = "all";
+    }
+
+    refreshCategoryOptions();
+    renderItems();
+    renderCategoryManager();
+}
+
 function closeCategoryModal() { categoryModal.hidden = true; }
