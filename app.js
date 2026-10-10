@@ -474,6 +474,25 @@ function closeQrModal() {
     qrModal.hidden = true;
 }
 
+// Neue Kategorie über den Manager hinzufügen
+async function createCategoryFromManager() {
+    const newCategory = managerCategoryInput.value.trim();
+    if (newCategory === "") return;
+
+    const categories = getAvailableCategories();
+    const exists = categories.some(cat => cat.toLowerCase() === newCategory.toLowerCase());
+
+    if (!exists) {
+        customCategories.push(newCategory);
+        saveCustomCategories();
+    }
+
+    managerCategoryInput.value = "";
+    refreshCategoryOptions();
+    renderCategoryManager();
+}
+
+
 // --- Kategorien Manager (vereinfacht) ---
 function openCategoryModal() { categoryModal.hidden = false; }
 function closeCategoryModal() { categoryModal.hidden = true; }
