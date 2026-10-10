@@ -88,7 +88,7 @@ let customCategories = loadCustomCategories();
 // Start
 initializeShareUi();
 setupEventHandlers();
-initializeApp();
+startApp();
 
 // --- Hilfsfunktionen für die Liste ---
 
@@ -190,7 +190,7 @@ function refreshCategoryOptions() {
 
 // --- Firebase Live-Synchronisation ---
 
-function initializeApp() {
+function startApp() {
     setStatus("Verbindung wird aufgebaut...", "loading");
 
     // Firebase Firestore Listener (Ersetzt fetchItems und subscribeToRealtime von Supabase)
