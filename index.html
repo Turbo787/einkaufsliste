@@ -140,7 +140,7 @@
 
         <footer class="app-footer">
             <span id="remaining-count">0 offene Artikel</span>
-            <span id="sync-note">Synchronisiert über Supabase</span>
+            <span id="sync-note">Synchronisiert über Firebase</span>
         </footer>
 
     </section>
@@ -311,8 +311,38 @@
     </section>
 </div>
     
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- HIER STARTET DER NEUE FIREBASE-CODE -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, enableIndexedDbPersistence } 
+    from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
+
+    // 🔴 HIER DEINE EIGENEN DATEN AUS DER FIREBASE CONSOLE EINFÜGEN 🔴
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4_6P8J_4H3EP1phrWIca8tMHl0rhox-0",
+      authDomain: "einkaufliste-app.firebaseapp.com",
+      projectId: "einkaufliste-app",
+      storageBucket: "einkaufliste-app.firebasestorage.app",
+      messagingSenderId: "863186045446",
+      appId: "1:863186045446:web:b2b242b79c0b2ed5519187",
+      measurementId: "G-MZ6FVT4B0W"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Offline-Cache für den Supermarkt ohne Empfang aktivieren
+    enableIndexedDbPersistence(db).catch((err) => {
+        console.log("Offline-Modus Fehler: ", err.code);
+    });
+
+    // Wir stellen die Datenbank global zur Verfügung, damit deine app.js darauf zugreifen kann
+    window.db = db;
+</script>
+<!-- HIER ENDET DER FIREBASE-CODE -->
+
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="app.js"></script>
+    
 </body>
 </html>
